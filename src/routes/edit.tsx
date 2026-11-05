@@ -300,7 +300,7 @@ function PageCanvas({
     editingIdx.current = null;
     setDraft({
       x: rtl ? x + w : x, y, text, size, color: c.fg, bg: c.bg, ltr: !rtl,
-      font: first?.font, bold: first?.bold, italic: first?.italic,
+      ...(first ? { font: first.font, bold: first.bold, italic: first.italic } : {}),
       cover: { x, y, w, h },
     });
   };
