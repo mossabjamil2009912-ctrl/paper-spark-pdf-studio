@@ -28,3 +28,5 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+- PDF processing runs entirely in the browser (pdf-lib for writing, pdfjs-dist lazily imported for rendering); annotations are stamped as a transparent PNG overlay so Arabic text shapes correctly without embedding fonts.
