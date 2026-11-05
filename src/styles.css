@@ -49,7 +49,7 @@
   --color-paper: var(--paper);
   --color-stage: var(--stage);
   --shadow-paper: var(--shadow-paper);
-  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-sans: "Amiri", "IBM Plex Sans Arabic", system-ui, sans-serif;
   --font-display: "Reem Kufi", "IBM Plex Sans Arabic", sans-serif;
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

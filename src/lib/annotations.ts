@@ -2,9 +2,10 @@
 export type TextItem = { kind: "text"; x: number; y: number; text: string; size: number; color: string; w: number };
 export type PathItem = { kind: "path"; points: [number, number][]; color: string; width: number; alpha: number };
 export type ImageItem = { kind: "image"; x: number; y: number; w: number; h: number; src: string; img?: HTMLImageElement };
-export type Item = TextItem | PathItem | ImageItem;
+export type RectItem = { kind: "rect"; x: number; y: number; w: number; h: number; color: string };
+export type Item = TextItem | PathItem | ImageItem | RectItem;
 
-export const FONT = '"IBM Plex Sans Arabic", sans-serif';
+export const FONT = '"Amiri", "IBM Plex Sans Arabic", serif';
 
 export function drawItems(ctx: CanvasRenderingContext2D, items: Item[], W: number, H: number) {
   ctx.clearRect(0, 0, W, H);
@@ -31,6 +32,9 @@ export function drawItems(ctx: CanvasRenderingContext2D, items: Item[], W: numbe
       ctx.direction = "rtl";
       it.text.split("\n").forEach((line, i) => ctx.fillText(line, it.x * W, it.y * H + i * it.size * W * 1.3));
       ctx.restore();
+    } else if (it.kind === "rect") {
+      ctx.fillStyle = it.color;
+      ctx.fillRect(it.x * W, it.y * H, it.w * W, it.h * H);
     } else if (it.img?.complete) {
       ctx.drawImage(it.img, it.x * W, it.y * H, it.w * W, it.h * H);
     }
@@ -48,7 +52,7 @@ export function hitTest(items: Item[], x: number, y: number, aspect: number): nu
       const lines = it.text.split("\n").length;
       const h = (it.size * 1.3 * lines) / aspect;
       if (x <= it.x && x >= it.x - it.w && y >= it.y && y <= it.y + h) return i;
-    } else if (it.kind === "image" && x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return i;
+    } else if ((it.kind === "image" || it.kind === "rect") && x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return i;
   }
   return -1;
 }

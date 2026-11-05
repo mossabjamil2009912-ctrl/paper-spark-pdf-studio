@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2 } from "lucide-react";
+import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,10 +23,11 @@ export const Route = createFileRoute("/edit")({
   component: EditPage,
 });
 
-type Tool = "none" | "text" | "pen" | "highlight" | "sign" | "erase";
+type Tool = "none" | "edittext" | "text" | "pen" | "highlight" | "sign" | "erase";
 const COLORS = ["#111827", "#1d4ed8", "#c2410c", "#15803d", "#facc15"] as const;
 const tools: { id: Tool; label: string; icon: typeof Pen }[] = [
   { id: "none", label: "تصفح", icon: MousePointer2 },
+  { id: "edittext", label: "تعديل النص", icon: FilePenLine },
   { id: "text", label: "نص", icon: Type },
   { id: "sign", label: "توقيع", icon: Signature },
   { id: "pen", label: "قلم", icon: Pen },
@@ -148,7 +149,7 @@ function EditPage() {
               />
             ))}
           </div>
-          {tool === "text" && (
+          {(tool === "text" || tool === "edittext") && (
             <select value={textSize} onChange={(e) => setTextSize(+e.target.value)} className="h-8 rounded-md border bg-background px-2 text-sm">
               <option value={0.018}>صغير</option>
               <option value={0.025}>متوسط</option>
@@ -161,6 +162,9 @@ function EditPage() {
             <Button size="sm" onClick={save} disabled={saving || !pages}><Download /> {saving ? "جارٍ الحفظ…" : "حفظ"}</Button>
           </div>
         </div>
+        {tool === "edittext" && (
+          <p className="pb-2 text-center text-xs text-muted-foreground">انقر على أي نص في الصفحة لتعديله</p>
+        )}
         {tool === "sign" && sig && (
           <p className="pb-2 text-center text-xs text-muted-foreground">انقر على الصفحة لوضع التوقيع · <button className="underline" onClick={() => setPadOpen(true)}>توقيع جديد</button></p>
         )}
@@ -181,7 +185,7 @@ function EditPage() {
                 color={color}
                 textSize={textSize}
                 sig={sig}
-                onAdd={(it) => commit(i, (l) => [...l, it])}
+                onAdd={(...its) => commit(i, (l) => [...l, ...its])}
                 onRemove={(k) => commit(i, (l) => l.filter((_, j) => j !== k))}
               />
             ))}
@@ -210,12 +214,12 @@ function PageCanvas({
   color: string;
   textSize: number;
   sig: { src: string; aspect: number } | null;
-  onAdd: (it: Item) => void;
+  onAdd: (...its: Item[]) => void;
   onRemove: (k: number) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef<Item | null>(null);
-  const [draft, setDraft] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
   const [tick, setTick] = useState(0);
   const aspect = page.height / page.width;
 
@@ -240,9 +244,11 @@ function PageCanvas({
   };
 
   const commitDraft = () => {
-    if (draft?.text.trim()) {
-      onAdd({ kind: "text", x: draft.x, y: draft.y, text: draft.text, size: textSize, color, w: measureText(draft.text, textSize) });
-    }
+    const size = draft?.size ?? textSize;
+    const cover = draft?.cover;
+    const txt = draft?.text.trim() ? [{ kind: "text" as const, x: draft!.x, y: draft!.y, text: draft!.text, size, color, w: measureText(draft!.text, size) }] : [];
+    if (cover) onAdd({ kind: "rect", ...cover, color: "#ffffff" }, ...txt);
+    else if (txt.length) onAdd(...txt);
     setDraft(null);
   };
 
@@ -283,6 +289,15 @@ function PageCanvas({
     }
   };
 
+  const editOriginal = (t: RenderedPage["texts"][number]) => {
+    if (draft) commitDraft();
+    const pad = 0.002;
+    setDraft({
+      x: t.x + t.w, y: t.y, text: t.str, size: (t.h / 1.2) * aspect,
+      cover: { x: t.x - pad, y: t.y - pad, w: t.w + pad * 2, h: t.h + pad * 2 },
+    });
+  };
+
   const drawing = tool === "pen" || tool === "highlight";
 
   return (
@@ -290,12 +305,22 @@ function PageCanvas({
       <img src={page.src} alt={`صفحة ${num}`} className="block w-full select-none" draggable={false} />
       <canvas
         ref={canvas}
-        className={`absolute inset-0 h-full w-full ${drawing ? "touch-none" : ""} ${tool === "none" ? "pointer-events-none" : tool === "text" ? "cursor-text" : "cursor-crosshair"}`}
+        className={`absolute inset-0 h-full w-full ${drawing ? "touch-none" : ""} ${tool === "none" || tool === "edittext" ? "pointer-events-none" : tool === "text" ? "cursor-text" : "cursor-crosshair"}`}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
       />
+      {tool === "edittext" && !draft && page.texts.map((t, k) => (
+        <button
+          key={k}
+          type="button"
+          title={t.str}
+          onClick={() => editOriginal(t)}
+          className="absolute rounded-sm outline-1 outline-accent/40 hover:bg-accent/20 hover:outline-accent"
+          style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%`, width: `${t.w * 100}%`, height: `${t.h * 100}%` }}
+        />
+      ))}
       {draft && (
         <textarea
           dir="auto"
@@ -307,12 +332,12 @@ function PageCanvas({
           }}
           onBlur={commitDraft}
           placeholder="اكتب هنا…"
-          className="absolute min-w-40 resize rounded border border-accent bg-paper/80 p-0 leading-[1.3] outline-none"
+          className="absolute min-w-40 resize rounded border border-accent bg-paper p-0 leading-[1.3] outline-none"
           style={{
             right: `${(1 - draft.x) * 100}%`,
             top: `${draft.y * 100}%`,
             color,
-            fontSize: `calc(${textSize} * var(--pw))`,
+            fontSize: `calc(${draft.size ?? textSize} * var(--pw))`, fontFamily: "Amiri, serif",
           }}
           ref={(el) => {
             if (!el || el.dataset["ready"]) return;
