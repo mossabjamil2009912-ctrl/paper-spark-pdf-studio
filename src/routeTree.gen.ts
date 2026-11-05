@@ -16,6 +16,7 @@ import { Route as MergeRouteImport } from './routes/merge'
 import { Route as OrganizeRouteImport } from './routes/organize'
 import { Route as PdfToExcelRouteImport } from './routes/pdf-to-excel'
 import { Route as SplitRouteImport } from './routes/split'
+import { Route as TranslateRouteImport } from './routes/translate'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +53,11 @@ const SplitRoute = SplitRouteImport.update({
   path: '/split',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TranslateRoute = TranslateRouteImport.update({
+  id: '/translate',
+  path: '/translate',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/organize': typeof OrganizeRoute
   '/pdf-to-excel': typeof PdfToExcelRoute
   '/split': typeof SplitRoute
+  '/translate': typeof TranslateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/organize': typeof OrganizeRoute
   '/pdf-to-excel': typeof PdfToExcelRoute
   '/split': typeof SplitRoute
+  '/translate': typeof TranslateRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/organize': typeof OrganizeRoute
   '/pdf-to-excel': typeof PdfToExcelRoute
   '/split': typeof SplitRoute
+  '/translate': typeof TranslateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
     | '/organize'
     | '/pdf-to-excel'
     | '/split'
+    | '/translate'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +110,7 @@ export interface FileRouteTypes {
     | '/organize'
     | '/pdf-to-excel'
     | '/split'
+    | '/translate'
   id:
     | '__root__'
     | '/'
@@ -109,6 +120,7 @@ export interface FileRouteTypes {
     | '/organize'
     | '/pdf-to-excel'
     | '/split'
+    | '/translate'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,6 +131,7 @@ export interface RootRouteChildren {
   OrganizeRoute: typeof OrganizeRoute
   PdfToExcelRoute: typeof PdfToExcelRoute
   SplitRoute: typeof SplitRoute
+  TranslateRoute: typeof TranslateRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -172,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SplitRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/translate': {
+      id: '/translate'
+      path: '/translate'
+      fullPath: '/translate'
+      preLoaderRoute: typeof TranslateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,6 +203,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrganizeRoute: OrganizeRoute,
   PdfToExcelRoute: PdfToExcelRoute,
   SplitRoute: SplitRoute,
+  TranslateRoute: TranslateRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

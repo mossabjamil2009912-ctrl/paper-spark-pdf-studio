@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Combine, FileSpreadsheet, Sheet, FileText, Layers, PenTool, Scissors, ShieldCheck } from "lucide-react";
+import { Languages, Combine, FileSpreadsheet, Sheet, FileText, Layers, PenTool, Scissors, ShieldCheck } from "lucide-react";
 import { Shell } from "@/components/pdf/Shell";
 
 export const Route = createFileRoute("/")({
@@ -23,6 +23,7 @@ const tools = [
   { to: "/organize", icon: Layers, title: "ترتيب الصفحات", desc: "دوّر، احذف وأعد ترتيب الصفحات." },
   { to: "/pdf-to-excel", icon: FileSpreadsheet, title: "PDF إلى Excel", desc: "حوّل الجداول والنصوص إلى خلايا قابلة للتعديل." },
   { to: "/excel-to-pdf", icon: Sheet, title: "Excel إلى PDF", desc: "حوّل جدولك إلى PDF بنفس التنسيق." },
+  { to: "/translate", icon: Languages, title: "ترجمة إلى الإنجليزية", desc: "ترجمة PDF وExcel احترافية تراعي المصطلحات والتنسيق." },
 ] as const;
 
 function Index() {

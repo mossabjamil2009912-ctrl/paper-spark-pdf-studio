@@ -9,6 +9,7 @@ const nav = [
   { to: "/organize", label: "الصفحات" },
   { to: "/pdf-to-excel", label: "إلى Excel" },
   { to: "/excel-to-pdf", label: "Excel إلى PDF" },
+  { to: "/translate", label: "ترجمة" },
 ] as const;
 
 export function Shell({ children }: { children: ReactNode }) {
