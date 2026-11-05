@@ -122,6 +122,36 @@ export function groupLines(items: Box[]): Box[] {
   });
 }
 
+type LineBox = { x: number; y: number; w: number; h: number };
+
+/**
+ * Cover rect for one detected line that never spills onto neighbouring lines.
+ * Line h includes a 20% descender allowance (h = glyph * 1.2); the cover is clamped
+ * between the baseline of the line above and the cap top of the line below.
+ */
+export function coverFor(lines: LineBox[], t: LineBox) {
+  const padX = 0.003, padY = 0.001;
+  const glyph = t.h / 1.2;
+  let top = t.y - padY, bottom = t.y + t.h + padY;
+  let left = t.x - padX, right = t.x + t.w + padX;
+  for (const o of lines) {
+    if (o === t) continue;
+    const overlapX = o.x < t.x + t.w && o.x + o.w > t.x;
+    const oBase = o.y + o.h / 1.2;
+    if (overlapX) {
+      if (o.y > t.y + glyph * 0.5 && o.y < bottom) bottom = Math.max(t.y + glyph, o.y - 0.0005);
+      if (oBase < t.y + glyph * 0.5 && oBase > top) top = Math.min(t.y, oBase + 0.0005);
+    } else {
+      const overlapY = o.y < t.y + t.h && o.y + o.h > t.y;
+      if (overlapY) {
+        if (o.x >= t.x + t.w && o.x < right) right = Math.max(t.x + t.w, o.x - 0.0005);
+        if (o.x + o.w <= t.x && o.x + o.w > left) left = Math.min(t.x, o.x + o.w + 0.0005);
+      }
+    }
+  }
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
 const hex = (r: number, g: number, b: number) => "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
 
 /** Background = most common colour on the box edge; foreground = pixel inside most unlike it. */

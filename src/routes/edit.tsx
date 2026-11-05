@@ -7,7 +7,7 @@ import { Busy, FileDrop, Shell } from "@/components/pdf/Shell";
 import { SignaturePad } from "@/components/pdf/SignaturePad";
 import { drawItems, fontCss, hitTest, measureText, type Item } from "@/lib/annotations";
 import { applyEdits, baseName, downloadBytes, isVectorable, type PageEdits } from "@/lib/pdf-ops";
-import { renderPages, sampleColors, type RenderedPage } from "@/lib/pdf-render";
+import { renderPages, sampleColors, coverFor, type RenderedPage } from "@/lib/pdf-render";
 
 export const Route = createFileRoute("/edit")({
   head: () => ({
@@ -358,7 +358,6 @@ function PageCanvas({
 
   const editOriginal = (t: RenderedPage["texts"][number], k: number) => {
     if (draft) commitDraft();
-    const pad = 0.004;
     editingIdx.current = k;
     const prev = edited.get(k);
     if (prev) { setDraft({ ...prev.draft }); return; }
@@ -368,7 +367,7 @@ function PageCanvas({
     if (m > 0) size = Math.min(size * 1.15, size * (t.w / m)); // match original line width
     setDraft({
       x: t.rtl ? t.x + t.w : t.x, y: t.y, text: t.str, size, color: t.fg, bg: t.bg, ...st, ltr: !t.rtl,
-      cover: { x: t.x - pad, y: t.y - pad, w: t.w + pad * 2, h: t.h + pad * 2 },
+      cover: coverFor(page.texts, t),
     });
   };
 

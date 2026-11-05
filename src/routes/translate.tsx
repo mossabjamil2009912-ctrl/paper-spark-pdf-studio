@@ -36,6 +36,7 @@ function TranslatePage() {
 
   const run = async (f: File) => {
     setDone(null);
+    if (!navigator.onLine) { toast.error("الترجمة تحتاج اتصالاً بالإنترنت. باقي الأدوات تعمل بدون إنترنت."); return; }
     setBusy("جارٍ قراءة الملف…");
     try {
       const lib = await import("@/lib/translate-doc");

@@ -1,4 +1,4 @@
-import type { RenderedPage } from "@/lib/pdf-render";
+import { coverFor, type RenderedPage } from "@/lib/pdf-render";
 import type { PageEdits } from "@/lib/pdf-ops";
 
 export type Translator = (segments: string[], context: string) => Promise<string[]>;
@@ -47,8 +47,7 @@ export function pdfEdits(pages: RenderedPage[], t: (s: string) => string, target
       const en = (ar ? t(src) : toLatin1(t(src))).trim();
       if (en === src) continue;
       if (!en) continue;
-      const pad = 0.004;
-      e.rects.push({ x: line.x - pad, y: line.y - pad, w: line.w + pad * 2, h: line.h + pad * 2, color: line.bg });
+      e.rects.push({ ...coverFor(p.texts, line), color: line.bg });
       // size as fraction of page width; shrink so the English fits the original line width
       let size = (line.h * p.height * 0.82) / p.width;
       const avg = line.bold ? 0.56 : 0.52;
