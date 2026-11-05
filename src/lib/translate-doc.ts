@@ -2,6 +2,7 @@ import type { RenderedPage } from "@/lib/pdf-render";
 import type { PageEdits } from "@/lib/pdf-ops";
 
 export type Translator = (segments: string[], context: string) => Promise<string[]>;
+export type Target = "en" | "ar";
 
 /** Characters the standard PDF fonts can encode; map common typographic ones to ASCII. */
 export function toLatin1(s: string) {
@@ -14,11 +15,13 @@ export function toLatin1(s: string) {
     .replace(/[^\x20-\x7E\u00A1-\u00FF\n]/g, "");
 }
 
-const needs = (s: string) => /[^\s\d.,:;%()\-+/\\*#=$€£@&|_[\]{}<>!?'"]/.test(s) && !/^[\x20-\x7E]*$/.test(s);
+const needsEn = (s: string) => /[^\s\d.,:;%()\-+/\\*#=$€£@&|_[\]{}<>!?'"]/.test(s) && !/^[\x20-\x7E]*$/.test(s);
+const needsAr = (s: string) => /[A-Za-z]{2,}/.test(s) && !/[\u0600-\u06FF]/.test(s);
+export const needsFor = (target: Target) => (target === "ar" ? needsAr : needsEn);
 
 /** Translate unique strings in batches, sharing a short document context for terminology. */
-export async function translateAll(strings: string[], tr: Translator, onProgress?: (p: number) => void) {
-  const uniq = [...new Set(strings.filter(needs))];
+export async function translateAll(strings: string[], tr: Translator, onProgress?: (p: number) => void, target: Target = "en") {
+  const uniq = [...new Set(strings.filter(needsFor(target)))];
   const context = uniq.join(" | ").slice(0, 3000);
   const map = new Map<string, string>();
   const size = 80;
@@ -32,14 +35,17 @@ export async function translateAll(strings: string[], tr: Translator, onProgress
 }
 
 /** Build per-page cover + English text edits from detected text lines. */
-export function pdfEdits(pages: RenderedPage[], t: (s: string) => string): Record<number, PageEdits> {
+export function pdfEdits(pages: RenderedPage[], t: (s: string) => string, target: Target = "en"): Record<number, PageEdits> {
+  const needs = needsFor(target);
+  const ar = target === "ar";
   const edits: Record<number, PageEdits> = {};
   pages.forEach((p, i) => {
     const e: PageEdits = { rects: [], texts: [] };
     for (const line of p.texts) {
       const src = line.str.trim();
       if (!needs(src)) continue;
-      const en = toLatin1(t(src)).trim();
+      const en = (ar ? t(src) : toLatin1(t(src))).trim();
+      if (en === src) continue;
       if (!en) continue;
       const pad = 0.004;
       e.rects.push({ x: line.x - pad, y: line.y - pad, w: line.w + pad * 2, h: line.h + pad * 2, color: line.bg });
@@ -50,6 +56,15 @@ export function pdfEdits(pages: RenderedPage[], t: (s: string) => string): Recor
       const maxW = Math.max(line.w * 1.35, 0.05);
       if (en.length * avg * size > maxW) size = Math.max(maxW / (en.length * avg), size * 0.6);
       // RTL lines keep their right edge so table columns stay aligned and nothing runs off the page
+      if (ar) {
+        // Arabic reads right-to-left: anchor to the line's right edge
+        const serif = /serif|times|georgia/i.test(line.font.split(",")[0] ?? "") && !/sans/i.test(line.font.split(",")[0] ?? "");
+        e.texts.push({
+          x: line.x + line.w, ltr: false, y: line.y + line.h * 0.08, text: en, size, color: line.fg,
+          font: serif ? "Amiri, serif" : "IBM Plex Sans Arabic, sans-serif", bold: line.bold, italic: false,
+        });
+        continue;
+      }
       e.texts.push({
         x: line.rtl ? line.x + line.w : line.x, ltr: !line.rtl, y: line.y + line.h * 0.08, text: en, size, color: line.fg,
         font: line.font.replace(/Amiri|IBM Plex Sans Arabic/g, ""), bold: line.bold, italic: line.italic,
@@ -61,7 +76,8 @@ export function pdfEdits(pages: RenderedPage[], t: (s: string) => string): Recor
 }
 
 /** Translate every text cell of an xlsx in place, keeping styles, merges, widths and formulas. */
-export async function translateXlsx(data: ArrayBuffer, tr: Translator, onProgress?: (p: number) => void): Promise<Blob> {
+export async function translateXlsx(data: ArrayBuffer, tr: Translator, onProgress?: (p: number) => void, target: Target = "en"): Promise<Blob> {
+  const ar = target === "ar";
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(data);
@@ -82,12 +98,13 @@ export async function translateXlsx(data: ArrayBuffer, tr: Translator, onProgres
       }),
     );
   });
-  const t = await translateAll(strings, tr, onProgress);
+  const t = await translateAll(strings, tr, onProgress, target);
   for (const h of hits) {
     if (h.rich) h.cell.value = { richText: h.rich.map((r) => ({ ...r, text: t(r.text) })) };
     else h.cell.value = t(h.cell.value as string);
     const al = h.cell.alignment;
-    if (al?.readingOrder === "rtl") h.cell.alignment = { ...al, readingOrder: "ltr" };
+    if (ar) h.cell.alignment = { ...(al ?? {}), readingOrder: "rtl" };
+    else if (al?.readingOrder === "rtl") h.cell.alignment = { ...al, readingOrder: "ltr" };
   }
   const used = new Set<string>();
   wb.eachSheet((ws) => {
@@ -95,7 +112,7 @@ export async function translateXlsx(data: ArrayBuffer, tr: Translator, onProgres
     while (used.has(n)) n = `${n.slice(0, 28)} ${used.size}`;
     used.add(n);
     ws.name = n;
-    ws.views = (ws.views?.length ? ws.views : [{}]).map((v) => ({ ...v, rightToLeft: false }));
+    ws.views = (ws.views?.length ? ws.views : [{}]).map((v) => ({ ...v, rightToLeft: ar }));
   });
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

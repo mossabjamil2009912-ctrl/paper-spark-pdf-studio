@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-const SYSTEM = `You are a senior professional translator into English.
+const SYSTEM_EN = `You are a senior professional translator into English.
 Translate each input segment into natural, professional English as a domain expert would write it — never word-for-word.
 Rules:
 - Use the correct established terminology for the document's field (engineering, finance, legal, medical, accounting, government, etc.). Infer the field from all segments together.
@@ -12,9 +12,19 @@ Rules:
 - Use only plain ASCII punctuation (straight quotes, hyphen).
 - Return exactly one translation per input, same order, same count.`;
 
+const SYSTEM_AR = `You are a senior professional translator into Arabic.
+Translate each input segment into natural, professional Modern Standard Arabic as a domain expert would write it — never word-for-word.
+Rules:
+- Use the correct established Arabic terminology for the document's field (engineering, finance, legal, medical, accounting, etc.). Infer the field from all segments together.
+- Keep technical terms that specialists normally write in English, abbreviations, acronyms, brand/product names, model numbers, codes, units, symbols, standards (e.g. IEC 61701, UL, kW, MPPT), emails, URLs and formulas in English exactly as written, embedded inside the Arabic sentence.
+- Keep numbers as Western digits (0-9) exactly as they are.
+- Table headers and labels stay short like headers.
+- If a segment is already Arabic or is only numbers/codes/symbols, return it unchanged.
+- Return exactly one translation per input, same order, same count.`;
+
 export const translateSegments = createServerFn({ method: "POST" })
   .validator((d) =>
-    z.object({ segments: z.array(z.string().max(2000)).min(1).max(150), context: z.string().max(4000).optional() }).parse(d),
+    z.object({ segments: z.array(z.string().max(2000)).min(1).max(150), context: z.string().max(4000).optional(), target: z.enum(["en", "ar"]).optional() }).parse(d),
   )
   .handler(async ({ data }) => {
     const key = process.env["LOVABLE_API_KEY"];
@@ -28,7 +38,7 @@ export const translateSegments = createServerFn({ method: "POST" })
         stream: true,
         store: false,
         reasoning: { effort: "low" },
-        instructions: SYSTEM,
+        instructions: data.target === "ar" ? SYSTEM_AR : SYSTEM_EN,
         input,
         text: {
           format: {

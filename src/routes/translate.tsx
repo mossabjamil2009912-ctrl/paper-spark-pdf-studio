@@ -10,9 +10,9 @@ import { translateSegments } from "@/lib/translate.functions";
 export const Route = createFileRoute("/translate")({
   head: () => ({
     meta: [
-      { title: "ترجمة PDF وExcel إلى الإنجليزية — حبر" },
-      { name: "description", content: "ترجم ملفات PDF وExcel إلى الإنجليزية ترجمة احترافية تراعي المصطلحات والرموز مع الحفاظ على التنسيق." },
-      { property: "og:title", content: "ترجمة PDF وExcel إلى الإنجليزية — حبر" },
+      { title: "ترجمة PDF وExcel بين العربية والإنجليزية — حبر" },
+      { name: "description", content: "ترجم ملفات PDF وExcel إلى الإنجليزية أو العربية ترجمة احترافية تراعي المصطلحات والرموز مع الحفاظ على التنسيق." },
+      { property: "og:title", content: "ترجمة PDF وExcel بين العربية والإنجليزية — حبر" },
       { property: "og:description", content: "ترجمة متخصصة غير حرفية مع بقاء التنسيق كما هو." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -25,9 +25,10 @@ function TranslatePage() {
   const call = useServerFn(translateSegments);
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [target, setTarget] = useState<"en" | "ar">("en");
 
   const tr = async (segments: string[], context: string) => {
-    const r = await call({ data: { segments, context } });
+    const r = await call({ data: { segments, context, target } });
     if (r.error) throw new Error(r.error);
     return r.translations;
   };
@@ -41,8 +42,8 @@ function TranslatePage() {
       const isXlsx = /\.xlsx$/i.test(f.name);
       let name: string;
       if (isXlsx) {
-        const blob = await lib.translateXlsx(await f.arrayBuffer(), tr, progress);
-        name = `${f.name.replace(/\.xlsx$/i, "")}-EN.xlsx`;
+        const blob = await lib.translateXlsx(await f.arrayBuffer(), tr, progress, target);
+        name = `${f.name.replace(/\.xlsx$/i, "")}-${target.toUpperCase()}.xlsx`;
         downloadBytes(blob, name);
       } else {
         const bytes = await f.arrayBuffer();
@@ -51,10 +52,10 @@ function TranslatePage() {
         const pages = await renderPages(bytes.slice(0), 1.5);
         const all = pages.flatMap((p) => p.texts.map((x) => x.str.trim()));
         if (!all.length) { toast.error("هذا الملف صور ممسوحة بلا نص قابل للقراءة."); return; }
-        const t = await lib.translateAll(all, tr, progress);
+        const t = await lib.translateAll(all, tr, progress, target);
         setBusy("جارٍ كتابة الملف…");
-        const out = await applyEdits(bytes, lib.pdfEdits(pages, t));
-        name = `${baseName(f.name)}-EN.pdf`;
+        const out = await applyEdits(bytes, lib.pdfEdits(pages, t, target));
+        name = `${baseName(f.name)}-${target.toUpperCase()}.pdf`;
         downloadBytes(out, name);
       }
       setDone(name);
@@ -68,7 +69,18 @@ function TranslatePage() {
 
   return (
     <Shell>
-      <PageTitle title="ترجمة إلى الإنجليزية" sub="ترجمة متخصصة تراعي مصطلحات مجال الملف وتحافظ على الأرقام والرموز والتنسيق — وليست ترجمة حرفية." />
+      <PageTitle title="ترجمة الملفات" sub="ترجمة متخصصة تراعي مصطلحات مجال الملف وتحافظ على الأرقام والرموز والتنسيق — وليست ترجمة حرفية." />
+      <div className="mx-auto mb-4 flex max-w-6xl gap-2 px-4">
+        {([["en", "إلى الإنجليزية"], ["ar", "إلى العربية"]] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setTarget(k)}
+            className={`rounded-full border px-4 py-2 text-sm ${target === k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {target === "ar" && (
+        <p className="mx-auto mb-2 max-w-6xl px-4 text-sm text-muted-foreground">تبقى المصطلحات التقنية والاختصارات والرموز والأرقام بالإنجليزية كما هي.</p>
+      )}
       <p className="mx-auto mb-4 max-w-6xl px-4 text-sm text-muted-foreground">
         يُرسل نص الملف فقط (دون الملف نفسه) لخدمة الترجمة الذكية ثم يُعاد بناء الملف على جهازك.
       </p>
