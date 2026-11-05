@@ -156,3 +156,9 @@
 
 @utility bg-ink { background-image: var(--gradient-ink); }
 @utility shadow-paper { box-shadow: var(--shadow-paper); }
+#lovable-badge {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
