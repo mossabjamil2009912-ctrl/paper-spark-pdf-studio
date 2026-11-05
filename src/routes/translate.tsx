@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Languages } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
@@ -26,6 +26,7 @@ function TranslatePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [target, setTarget] = useState<"en" | "ar">("en");
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("to") === "ar") setTarget("ar"); }, []);
 
   const tr = async (segments: string[], context: string) => {
     const r = await call({ data: { segments, context, target } });

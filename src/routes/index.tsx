@@ -1,14 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Languages, Combine, FileSpreadsheet, Sheet, FileText, Layers, PenTool, Scissors, ShieldCheck } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import { Languages, Combine, FileSpreadsheet, Sheet, PenTool, Scissors } from "lucide-react";
 import { Shell } from "@/components/pdf/Shell";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "حبر — عدّل ملفات PDF مجاناً" },
+      { title: "أكتس — أدوات PDF وExcel" },
       { name: "description", content: "أضف نصاً وتوقيعاً، ارسم وظلّل، ادمج وقسّم ورتّب صفحات PDF داخل متصفحك." },
-      { property: "og:title", content: "حبر — عدّل ملفات PDF مجاناً" },
-      { property: "og:description", content: "محرر PDF عربي يعمل في متصفحك دون رفع ملفاتك." },
+      { property: "og:title", content: "أكتس — أدوات PDF وExcel" },
+      { property: "og:description", content: "عدّل، قسّم، ادمج، حوّل وترجم ملفات PDF وExcel بسهولة." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -17,52 +17,39 @@ export const Route = createFileRoute("/")({
 });
 
 const tools = [
-  { to: "/edit", icon: PenTool, title: "تعديل وتوقيع", desc: "أضف نصاً، وقّع، ارسم وظلّل على الصفحات." },
-  { to: "/merge", icon: Combine, title: "دمج الملفات", desc: "اجمع عدة ملفات في ملف واحد بالترتيب الذي تريده." },
-  { to: "/split", icon: Scissors, title: "تقسيم الملف", desc: "استخرج صفحات محددة أو افصل كل صفحة في ملف." },
-  { to: "/organize", icon: Layers, title: "ترتيب الصفحات", desc: "دوّر، احذف وأعد ترتيب الصفحات." },
-  { to: "/pdf-to-excel", icon: FileSpreadsheet, title: "PDF إلى Excel", desc: "حوّل الجداول والنصوص إلى خلايا قابلة للتعديل." },
-  { to: "/excel-to-pdf", icon: Sheet, title: "Excel إلى PDF", desc: "حوّل جدولك إلى PDF بنفس التنسيق." },
-  { to: "/translate", icon: Languages, title: "ترجمة إلى الإنجليزية", desc: "ترجمة PDF وExcel احترافية تراعي المصطلحات والتنسيق." },
+  { to: "/edit", icon: PenTool, title: "تعديل PDF" },
+  { to: "/split", icon: Scissors, title: "تقسيم الملف" },
+  { to: "/merge", icon: Combine, title: "دمج الملفات" },
+  { to: "/pdf-to-excel", icon: FileSpreadsheet, title: "تحويل PDF إلى Excel" },
+  { to: "/excel-to-pdf", icon: Sheet, title: "تحويل Excel إلى PDF" },
+  { to: "/translate", href: "/translate?to=ar", icon: Languages, title: "ترجمة إلى العربية" },
+  { to: "/translate", href: "/translate?to=en", icon: Languages, title: "ترجمة إلى الإنجليزية" },
 ] as const;
 
 function Index() {
   return (
     <Shell>
-      <section className="mx-auto max-w-6xl px-4 pt-14 pb-10 md:pt-20">
-        <div className="max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full bg-secondary px-3 py-1 text-sm text-secondary-foreground">
-            <ShieldCheck className="h-4 w-4 text-accent" /> ملفاتك تبقى على جهازك
-          </span>
-          <h1 className="mt-5 text-5xl leading-tight text-primary md:text-6xl">
-            كل ما تحتاجه
-            <br />
-            لتعديل <span className="text-accent">PDF</span>
-          </h1>
-          <p className="mt-4 text-lg text-muted-foreground">
-            محرر مجاني بالعربية، بلا تسجيل وبلا رفع للملفات. اختر أداة وابدأ.
-          </p>
-        </div>
+      <section className="mx-auto max-w-3xl px-4 pt-10 pb-6 text-center">
+        <h1 className="text-3xl font-bold text-primary md:text-4xl">اختر الخدمة</h1>
       </section>
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-20 sm:grid-cols-2">
+      <section className="mx-auto grid max-w-3xl gap-3 px-4 pb-16 sm:grid-cols-2">
         {tools.map((t) => (
-          <Link
-            key={t.to}
-            to={t.to}
-            className="group flex gap-4 rounded-2xl border bg-card p-6 transition-all hover:-translate-y-0.5 hover:shadow-paper"
+          <a
+            key={t.title}
+            href={"href" in t ? t.href : t.to}
+            className="group flex items-center gap-4 rounded-2xl border bg-card p-5 transition-all hover:-translate-y-0.5 hover:shadow-paper"
           >
             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-ink text-primary-foreground transition-colors group-hover:bg-none group-hover:bg-accent">
               <t.icon className="h-6 w-6" />
             </span>
             <span>
-              <span className="block font-display text-xl text-foreground">{t.title}</span>
-              <span className="mt-1 block text-sm text-muted-foreground">{t.desc}</span>
+              <span className="block text-lg font-bold text-foreground">{t.title}</span>
             </span>
-          </Link>
+          </a>
         ))}
       </section>
       <footer className="border-t py-6 text-center text-sm text-muted-foreground">
-        <FileText className="mx-auto mb-1 h-4 w-4" /> حبر — محرر PDF
+        أكتس لأنظمة الطاقة وحلولها
       </footer>
     </Shell>
   );

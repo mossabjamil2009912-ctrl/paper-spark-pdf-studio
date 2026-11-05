@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { FileUp, PenLine } from "lucide-react";
+import { FileUp } from "lucide-react";
+import logo from "@/assets/actes-logo.png.asset.json";
 import { useRef, useState, type ReactNode } from "react";
 
 const nav = [
   { to: "/edit", label: "تعديل" },
   { to: "/merge", label: "دمج" },
   { to: "/split", label: "تقسيم" },
-  { to: "/organize", label: "الصفحات" },
   { to: "/pdf-to-excel", label: "إلى Excel" },
   { to: "/excel-to-pdf", label: "Excel إلى PDF" },
   { to: "/translate", label: "ترجمة" },
@@ -18,10 +18,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-ink text-primary-foreground">
-              <PenLine className="h-5 w-5" />
-            </span>
-            <span className="font-display text-2xl text-primary">حبر</span>
+            <img src={logo.url} alt="أكتس" className="h-10 w-auto" />
           </Link>
           <nav className="flex gap-1 overflow-x-auto text-sm">
             {nav.map((n) => (
