@@ -202,6 +202,7 @@ function EditPage() {
                 sig={sig}
                 onAdd={(...its) => commit(i, (l) => [...l, ...its])}
                 onRemove={(k) => commit(i, (l) => l.filter((_, j) => j !== k))}
+                onReplace={(old, its) => commit(i, (l) => [...l.filter((x) => !old.includes(x)), ...its])}
               />
             ))}
           </div>
@@ -220,7 +221,7 @@ function EditPage() {
 }
 
 function PageCanvas({
-  page, num, items, tool, color, textSize, sig, onAdd, onRemove,
+  page, num, items, tool, color, textSize, sig, onAdd, onRemove, onReplace,
 }: {
   page: RenderedPage;
   num: number;
@@ -231,11 +232,13 @@ function PageCanvas({
   sig: { src: string; aspect: number } | null;
   onAdd: (...its: Item[]) => void;
   onRemove: (k: number) => void;
+  onReplace: (old: Item[], its: Item[]) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef<Item | null>(null);
   const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; color?: string; bg?: string; font?: string; bold?: boolean; italic?: boolean; ltr?: boolean; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
-  const [edited, setEdited] = useState<Set<number>>(new Set());
+  type Draft = NonNullable<typeof draft>;
+  const [edited, setEdited] = useState<Map<number, { draft: Draft; items: Item[] }>>(new Map());
   const editingIdx = useRef<number | null>(null);
   const [tick, setTick] = useState(0);
   const [sel, setSel] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
@@ -270,9 +273,11 @@ function PageCanvas({
     const st = { font: draft?.font, bold: draft?.bold, italic: draft?.italic };
     const txt = draft?.text.trim() ? [{ kind: "text" as const, x: draft!.x, y: draft!.y, text: draft!.text, size, color: c, w: measureText(draft!.text, size, st), ...st, ltr: draft!.ltr }] : [];
     if (cover) {
-      onAdd({ kind: "rect", ...cover, color: draft?.bg ?? "#ffffff" }, ...txt);
+      const its: Item[] = [{ kind: "rect", ...cover, color: draft?.bg ?? "#ffffff" }, ...txt];
       const k = editingIdx.current;
-      if (k !== null) setEdited((s) => new Set(s).add(k));
+      const prev = k !== null ? edited.get(k) : undefined;
+      if (prev) onReplace(prev.items, its); else onAdd(...its);
+      if (k !== null) setEdited((s) => new Map(s).set(k, { draft: draft!, items: its }));
     }
     else if (txt.length) onAdd(...txt);
     setDraft(null);
@@ -355,6 +360,8 @@ function PageCanvas({
     if (draft) commitDraft();
     const pad = 0.004;
     editingIdx.current = k;
+    const prev = edited.get(k);
+    if (prev) { setDraft({ ...prev.draft }); return; }
     const st = { font: t.font, bold: t.bold, italic: t.italic };
     let size = (t.h / 1.2) * aspect * 0.95;
     const m = measureText(t.str, size, st);
@@ -384,13 +391,13 @@ function PageCanvas({
           style={{ left: `${Math.min(sel.x0, sel.x1) * 100}%`, top: `${Math.min(sel.y0, sel.y1) * 100}%`, width: `${Math.abs(sel.x1 - sel.x0) * 100}%`, height: `${Math.abs(sel.y1 - sel.y0) * 100}%` }}
         />
       )}
-      {tool === "edittext" && !draft && page.texts.map((t, k) => !edited.has(k) && (
+      {tool === "edittext" && !draft && page.texts.map((t, k) => (
         <button
           key={k}
           type="button"
           title={t.str}
           onClick={() => editOriginal(t, k)}
-          className="absolute rounded-sm transition-colors hover:bg-accent/20 hover:outline hover:outline-1 hover:outline-accent active:bg-accent/30"
+          className={`absolute rounded-sm transition-colors ${edited.has(k) ? "outline-dashed outline-1 outline-accent/60" : ""} hover:bg-accent/20 hover:outline hover:outline-1 hover:outline-accent active:bg-accent/30`}
           style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%`, width: `${t.w * 100}%`, height: `${t.h * 100}%` }}
         />
       ))}
