@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Busy, FileDrop, Shell } from "@/components/pdf/Shell";
 import { SignaturePad } from "@/components/pdf/SignaturePad";
-import { drawItems, hitTest, measureText, type Item } from "@/lib/annotations";
+import { drawItems, fontCss, hitTest, measureText, type Item } from "@/lib/annotations";
 import { baseName, downloadBytes, stampOverlays } from "@/lib/pdf-ops";
 import { renderPages, type RenderedPage } from "@/lib/pdf-render";
 
@@ -86,13 +86,14 @@ function EditPage() {
     if (!file || !pages) return;
     setSaving(true);
     try {
+      await Promise.all(items.flat().map((it) => (it.kind === "text" ? document.fonts.load(fontCss(it, 20), it.text).catch(() => []) : null)));
       await document.fonts.ready;
       const overlays: Record<number, Uint8Array> = {};
       for (let i = 0; i < pages.length; i++) {
         const list = items[i] ?? [];
         const pg = pages[i]!;
         if (!list.length) continue;
-        const W = Math.round(pg.width * 3), H = Math.round(pg.height * 3);
+        const W = Math.round(pg.width * 4), H = Math.round(pg.height * 4);
         const c = document.createElement("canvas");
         c.width = W; c.height = H;
         drawItems(c.getContext("2d")!, list, W, H);
@@ -219,7 +220,7 @@ function PageCanvas({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef<Item | null>(null);
-  const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; color?: string; bg?: string; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; color?: string; bg?: string; font?: string; bold?: boolean; italic?: boolean; ltr?: boolean; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
   const [edited, setEdited] = useState<Set<number>>(new Set());
   const editingIdx = useRef<number | null>(null);
   const [tick, setTick] = useState(0);
@@ -228,7 +229,8 @@ function PageCanvas({
   const redraw = useCallback(() => {
     const c = canvas.current;
     if (!c) return;
-    const W = c.clientWidth * 2, H = c.clientHeight * 2;
+    const dpr = Math.min(4, Math.max(2, window.devicePixelRatio || 1));
+    const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     drawItems(c.getContext("2d")!, live.current ? [...items, live.current] : items, W, H);
   }, [items]);
@@ -237,7 +239,8 @@ function PageCanvas({
     redraw();
     document.fonts?.ready.then(redraw);
     window.addEventListener("resize", redraw);
-    return () => window.removeEventListener("resize", redraw);
+    document.fonts?.addEventListener("loadingdone", redraw);
+    return () => { window.removeEventListener("resize", redraw); document.fonts?.removeEventListener("loadingdone", redraw); };
   }, [redraw, tick]);
 
   const pt = (e: React.PointerEvent | React.MouseEvent): [number, number] => {
@@ -249,7 +252,8 @@ function PageCanvas({
     const size = draft?.size ?? textSize;
     const cover = draft?.cover;
     const c = draft?.color ?? color;
-    const txt = draft?.text.trim() ? [{ kind: "text" as const, x: draft!.x, y: draft!.y, text: draft!.text, size, color: c, w: measureText(draft!.text, size) }] : [];
+    const st = { font: draft?.font, bold: draft?.bold, italic: draft?.italic };
+    const txt = draft?.text.trim() ? [{ kind: "text" as const, x: draft!.x, y: draft!.y, text: draft!.text, size, color: c, w: measureText(draft!.text, size, st), ...st, ltr: draft!.ltr }] : [];
     if (cover) {
       onAdd({ kind: "rect", ...cover, color: draft?.bg ?? "#ffffff" }, ...txt);
       const k = editingIdx.current;
@@ -301,8 +305,12 @@ function PageCanvas({
     if (draft) commitDraft();
     const pad = 0.002;
     editingIdx.current = k;
+    const st = { font: t.font, bold: t.bold, italic: t.italic };
+    let size = (t.h / 1.2) * aspect * 0.95;
+    const m = measureText(t.str, size, st);
+    if (m > 0) size = Math.min(size * 1.15, size * (t.w / m)); // match original line width
     setDraft({
-      x: t.x + t.w, y: t.y, text: t.str, size: (t.h / 1.2) * aspect * 0.95, color: t.fg, bg: t.bg,
+      x: t.rtl ? t.x + t.w : t.x, y: t.y, text: t.str, size, color: t.fg, bg: t.bg, ...st, ltr: !t.rtl,
       cover: { x: t.x - pad, y: t.y - pad, w: t.w + pad * 2, h: t.h + pad * 2 },
     });
   };
@@ -332,7 +340,7 @@ function PageCanvas({
       ))}
       {draft && (
         <textarea
-          dir="auto"
+          dir={draft.ltr ? "ltr" : draft.font ? "rtl" : "auto"}
           value={draft.text}
           onChange={(e) => setDraft({ ...draft, text: e.target.value })}
           onKeyDown={(e) => {
@@ -343,11 +351,14 @@ function PageCanvas({
           placeholder="اكتب هنا…"
           className="absolute min-w-24 resize rounded border border-accent p-0 leading-[1.3] outline-none"
           style={{
-            right: `${(1 - draft.x) * 100}%`,
+            ...(draft.ltr ? { left: `${draft.x * 100}%` } : { right: `${(1 - draft.x) * 100}%` }),
             top: `${draft.y * 100}%`,
             color: draft.color ?? color,
             background: draft.bg ?? "var(--paper, #fff)",
-            fontSize: `calc(${draft.size ?? textSize} * var(--pw))`, fontFamily: "Amiri, serif",
+            fontSize: `calc(${draft.size ?? textSize} * var(--pw))`,
+            fontFamily: draft.font ?? '"Amiri", serif',
+            fontWeight: draft.bold ? 700 : 400,
+            fontStyle: draft.italic ? "italic" : "normal",
           }}
           ref={(el) => {
             if (!el || el.dataset["ready"]) return;

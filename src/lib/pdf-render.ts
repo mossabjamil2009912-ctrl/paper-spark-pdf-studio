@@ -15,7 +15,18 @@ function getPdfjs() {
 }
 
 /** Box in page fractions (0..1). */
-export type PageText = { str: string; x: number; y: number; w: number; h: number; bg: string; fg: string };
+export type PageText = { str: string; x: number; y: number; w: number; h: number; bg: string; fg: string; font: string; bold: boolean; italic: boolean; rtl: boolean };
+
+/** Map a PDF font name + generic family to a CSS font stack close to the original. */
+export function cssFontFor(name: string, generic: string, rtl: boolean): string {
+  const n = name.toLowerCase();
+  const serif = /times|serif|roman|georgia|garamond|minion|cambria|book|amiri|naskh|traditional|lotus|mudir|badr/.test(n) && !/sans/.test(n);
+  const mono = /mono|courier|consol/.test(n) || generic === "monospace";
+  const isSerif = serif || (generic === "serif" && !/sans|arial|helvet|tahoma|segoe|calibri|verdana|inter|roboto/.test(n));
+  if (mono) return '"Noto Sans Mono", "Courier New", monospace';
+  if (isSerif) return rtl ? '"Amiri", "Noto Serif", serif' : '"Noto Serif", "Times New Roman", "Amiri", serif';
+  return rtl ? '"IBM Plex Sans Arabic", "Noto Sans", sans-serif' : '"Noto Sans", Arial, "IBM Plex Sans Arabic", sans-serif';
+}
 export type RenderedPage = { src: string; width: number; height: number; texts: PageText[] };
 
 /** Render each page to a JPEG data URL. width/height are the displayed size in PDF points. */
@@ -35,22 +46,34 @@ export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<Render
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, canvas, viewport: vp }).promise;
-    const raw: { str: string; x: number; y: number; w: number; h: number }[] = [];
+    const raw: Box[] = [];
     try {
       const tc = await page.getTextContent();
+      const styles = tc.styles as Record<string, { fontFamily?: string }>;
+      const fontInfo = (fn: string) => {
+        let real = "";
+        try { const o = page.commonObjs.get(fn) as { name?: string; bold?: boolean; italic?: boolean; black?: boolean } | undefined; real = o?.name ?? ""; if (o?.bold || o?.black) real += "-Bold"; if (o?.italic) real += "-Italic"; } catch { /* not loaded */ }
+        return { real, generic: styles[fn]?.fontFamily ?? "sans-serif" };
+      };
       for (const r of tc.items) {
-        const it = r as { str?: string; transform?: number[]; width?: number };
+        const it = r as { str?: string; transform?: number[]; width?: number; fontName?: string };
         if (!it.str?.trim() || !it.transform) continue;
         const t = pdfjs.Util.transform(base.transform, it.transform);
         const h = Math.hypot(t[2]!, t[3]!);
         const w = it.width ?? 0;
         if (h <= 0 || w <= 0) continue;
-        raw.push({ str: it.str, x: t[4]!, y: t[5]! - h, w, h });
+        const fi = fontInfo(it.fontName ?? "");
+        raw.push({ str: it.str, x: t[4]!, y: t[5]! - h, w, h, fontName: fi.real, generic: fi.generic });
       }
     } catch (e) { console.warn(e); }
     const texts = groupLines(raw).map((l) => {
       const c = sampleColors(ctx, l.x * scale, l.y * scale, l.w * scale, l.h * 1.2 * scale);
-      return { str: l.str, x: l.x / base.width, y: l.y / base.height, w: l.w / base.width, h: (l.h * 1.2) / base.height, ...c };
+      const fn = l.fontName ?? "";
+      const rtl = AR.test(l.str);
+      const bold = /bold|black|heavy|semibold|demi|w[6-9]/i.test(fn);
+      const italic = /italic|oblique/i.test(fn);
+      return { str: l.str, x: l.x / base.width, y: l.y / base.height, w: l.w / base.width, h: (l.h * 1.2) / base.height, ...c,
+        font: cssFontFor(fn, l.generic ?? "sans-serif", rtl), bold, italic, rtl };
     });
     out.push({ texts, src: canvas.toDataURL("image/jpeg", 0.85), width: base.width, height: base.height });
     page.cleanup();
@@ -59,7 +82,7 @@ export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<Render
   return out;
 }
 
-type Box = { str: string; x: number; y: number; w: number; h: number };
+type Box = { str: string; x: number; y: number; w: number; h: number; fontName?: string | undefined; generic?: string | undefined };
 const AR = /[\u0600-\u06FF]/;
 
 /** Merge pdf.js fragments sitting on the same baseline and close together into whole lines. */
@@ -90,7 +113,8 @@ export function groupLines(items: Box[]): Box[] {
     });
     const x = Math.min(...l.map((b) => b.x)), y = Math.min(...l.map((b) => b.y));
     const r = Math.max(...l.map((b) => b.x + b.w)), bt = Math.max(...l.map((b) => b.y + b.h));
-    return { str: str.trim(), x, y, w: r - x, h: bt - y };
+    const main = [...l].sort((a, b) => b.w - a.w)[0]!;
+    return { str: str.trim(), x, y, w: r - x, h: bt - y, fontName: main.fontName, generic: main.generic };
   });
 }
 

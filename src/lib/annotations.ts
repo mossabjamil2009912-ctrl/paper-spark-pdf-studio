@@ -1,5 +1,9 @@
 // All coordinates are fractions of the page (0..1); sizes are fractions of page width.
-export type TextItem = { kind: "text"; x: number; y: number; text: string; size: number; color: string; w: number };
+/** x is the right edge for rtl text, the left edge for ltr text. */
+export type TextItem = { kind: "text"; x: number; y: number; text: string; size: number; color: string; w: number; font?: string | undefined; bold?: boolean | undefined; italic?: boolean | undefined; ltr?: boolean | undefined };
+
+export const fontCss = (it: { size: number; font?: string | undefined; bold?: boolean | undefined; italic?: boolean | undefined }, px: number) =>
+  `${it.italic ? "italic " : ""}${it.bold ? 700 : it.font ? 400 : 500} ${px}px ${it.font ?? FONT}`;
 export type PathItem = { kind: "path"; points: [number, number][]; color: string; width: number; alpha: number };
 export type ImageItem = { kind: "image"; x: number; y: number; w: number; h: number; src: string; img?: HTMLImageElement };
 export type RectItem = { kind: "rect"; x: number; y: number; w: number; h: number; color: string };
@@ -26,10 +30,10 @@ export function drawItems(ctx: CanvasRenderingContext2D, items: Item[], W: numbe
     } else if (it.kind === "text") {
       ctx.save();
       ctx.fillStyle = it.color;
-      ctx.font = `500 ${it.size * W}px ${FONT}`;
+      ctx.font = fontCss(it, it.size * W);
       ctx.textBaseline = "top";
-      ctx.textAlign = "right";
-      ctx.direction = "rtl";
+      ctx.textAlign = it.ltr ? "left" : "right";
+      ctx.direction = it.ltr ? "ltr" : "rtl";
       it.text.split("\n").forEach((line, i) => ctx.fillText(line, it.x * W, it.y * H + i * it.size * W * 1.3));
       ctx.restore();
     } else if (it.kind === "rect") {
@@ -51,14 +55,15 @@ export function hitTest(items: Item[], x: number, y: number, aspect: number): nu
     } else if (it.kind === "text") {
       const lines = it.text.split("\n").length;
       const h = (it.size * 1.3 * lines) / aspect;
-      if (x <= it.x && x >= it.x - it.w && y >= it.y && y <= it.y + h) return i;
+      const left = it.ltr ? it.x : it.x - it.w;
+      if (x >= left && x <= left + it.w && y >= it.y && y <= it.y + h) return i;
     } else if ((it.kind === "image" || it.kind === "rect") && x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return i;
   }
   return -1;
 }
 
-export function measureText(text: string, size: number) {
+export function measureText(text: string, size: number, style: { font?: string | undefined; bold?: boolean | undefined; italic?: boolean | undefined } = {}) {
   const c = document.createElement("canvas").getContext("2d")!;
-  c.font = `500 ${size * 1000}px ${FONT}`;
+  c.font = fontCss({ size, ...style }, size * 1000);
   return Math.max(...text.split("\n").map((l) => c.measureText(l).width)) / 1000;
 }
