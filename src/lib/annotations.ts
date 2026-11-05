@@ -19,7 +19,7 @@ export function drawItems(ctx: CanvasRenderingContext2D, items: Item[], W: numbe
       ctx.lineJoin = "round";
       ctx.beginPath();
       it.points.forEach(([x, y], i) => (i ? ctx.lineTo(x * W, y * H) : ctx.moveTo(x * W, y * H)));
-      if (it.points.length === 1) ctx.lineTo(it.points[0][0] * W + 0.5, it.points[0][1] * H);
+      if (it.points.length === 1) ctx.lineTo(it.points[0]![0] * W + 0.5, it.points[0]![1] * H);
       ctx.stroke();
       ctx.restore();
     } else if (it.kind === "text") {
@@ -40,7 +40,7 @@ export function drawItems(ctx: CanvasRenderingContext2D, items: Item[], W: numbe
 /** Returns the index of the topmost item under (x,y), or -1. aspect = H/W. */
 export function hitTest(items: Item[], x: number, y: number, aspect: number): number {
   for (let i = items.length - 1; i >= 0; i--) {
-    const it = items[i];
+    const it = items[i]!;
     if (it.kind === "path") {
       const tol = Math.max(it.width, 0.015);
       if (it.points.some(([px, py]) => Math.hypot(px - x, (py - y) * aspect) < tol)) return i;
@@ -48,7 +48,7 @@ export function hitTest(items: Item[], x: number, y: number, aspect: number): nu
       const lines = it.text.split("\n").length;
       const h = (it.size * 1.3 * lines) / aspect;
       if (x <= it.x && x >= it.x - it.w && y >= it.y && y <= it.y + h) return i;
-    } else if (x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return i;
+    } else if (it.kind === "image" && x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h) return i;
   }
   return -1;
 }

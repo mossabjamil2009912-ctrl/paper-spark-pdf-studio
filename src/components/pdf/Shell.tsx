@@ -63,7 +63,7 @@ export function FileDrop({
     const files = Array.from(list ?? []).filter(
       (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
     );
-    if (files.length) onFiles(multiple ? files : [files[0]]);
+    if (files.length) onFiles(multiple ? files : files.slice(0, 1));
   };
   return (
     <div className="mx-auto max-w-6xl px-4">

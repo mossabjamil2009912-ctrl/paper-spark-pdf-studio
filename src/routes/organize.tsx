@@ -49,14 +49,14 @@ function OrganizePage() {
       const j = k + d;
       if (j < 0 || j >= x.length) return x;
       const n = [...x];
-      [n[k], n[j]] = [n[j], n[k]];
+      [n[k], n[j]] = [n[j]!, n[k]!];
       return n;
     });
 
   const save = async () => {
     if (!file) return;
     const keep = items.filter((i) => !i.deleted);
-    if (!keep.length) return toast.error("لا توجد صفحات متبقية");
+    if (!keep.length) { toast.error("لا توجد صفحات متبقية"); return; }
     setBusy(true);
     try {
       downloadBytes(await organizePdf(file.bytes, keep), `${baseName(file.name)}-معدّل.pdf`);
@@ -69,7 +69,7 @@ function OrganizePage() {
     <Shell>
       <PageTitle title="ترتيب الصفحات" sub="دوّر الصفحات، احذفها، أو حرّكها لتغيير ترتيبها." />
       {!file ? (
-        <FileDrop onFiles={(f) => load(f[0])} />
+        <FileDrop onFiles={(f) => f[0] && load(f[0])} />
       ) : !pages ? (
         <Busy />
       ) : (
@@ -86,7 +86,7 @@ function OrganizePage() {
               <div key={it.index} className={`rounded-xl border bg-card p-2 ${it.deleted ? "opacity-40" : ""}`}>
                 <div className="grid aspect-square place-items-center overflow-hidden rounded-lg bg-stage p-2">
                   <img
-                    src={pages[it.index].src}
+                    src={pages[it.index]?.src}
                     alt={`صفحة ${it.index + 1}`}
                     className="max-h-full max-w-full bg-paper shadow-paper transition-transform"
                     style={{ transform: `rotate(${it.rotation}deg)` }}

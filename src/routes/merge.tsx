@@ -30,7 +30,7 @@ function MergePage() {
       const n = [...f];
       const j = i + d;
       if (j < 0 || j >= n.length) return f;
-      [n[i], n[j]] = [n[j], n[i]];
+      [n[i], n[j]] = [n[j]!, n[i]!];
       return n;
     });
 

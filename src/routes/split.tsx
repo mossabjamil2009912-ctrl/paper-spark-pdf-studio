@@ -81,7 +81,7 @@ function SplitPage() {
     <Shell>
       <PageTitle title="تقسيم الملف" sub="اختر الصفحات بالنقر أو اكتب نطاقاً مثل 1-3، 5." />
       {!file ? (
-        <FileDrop onFiles={(f) => load(f[0])} />
+        <FileDrop onFiles={(f) => f[0] && load(f[0])} />
       ) : !pages ? (
         <Busy />
       ) : (

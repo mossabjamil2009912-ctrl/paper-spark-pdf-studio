@@ -24,7 +24,7 @@ export const Route = createFileRoute("/edit")({
 });
 
 type Tool = "none" | "text" | "pen" | "highlight" | "sign" | "erase";
-const COLORS = ["#111827", "#1d4ed8", "#c2410c", "#15803d", "#facc15"];
+const COLORS = ["#111827", "#1d4ed8", "#c2410c", "#15803d", "#facc15"] as const;
 const tools: { id: Tool; label: string; icon: typeof Pen }[] = [
   { id: "none", label: "تصفح", icon: MousePointer2 },
   { id: "text", label: "نص", icon: Type },
@@ -40,7 +40,7 @@ function EditPage() {
   const [items, setItems] = useState<Item[][]>([]);
   const [history, setHistory] = useState<Item[][][]>([]);
   const [tool, setTool] = useState<Tool>("none");
-  const [color, setColor] = useState(COLORS[0]);
+  const [color, setColor] = useState<string>(COLORS[0]);
   const [textSize, setTextSize] = useState(0.025);
   const [sig, setSig] = useState<{ src: string; aspect: number } | null>(null);
   const [padOpen, setPadOpen] = useState(false);
@@ -72,7 +72,7 @@ function EditPage() {
   const undo = () =>
     setHistory((h) => {
       if (!h.length) return h;
-      setItems(h[h.length - 1]);
+      setItems(h[h.length - 1]!);
       return h.slice(0, -1);
     });
 
@@ -88,11 +88,13 @@ function EditPage() {
       await document.fonts.ready;
       const overlays: Record<number, Uint8Array> = {};
       for (let i = 0; i < pages.length; i++) {
-        if (!items[i].length) continue;
-        const W = Math.round(pages[i].width * 3), H = Math.round(pages[i].height * 3);
+        const list = items[i] ?? [];
+        const pg = pages[i]!;
+        if (!list.length) continue;
+        const W = Math.round(pg.width * 3), H = Math.round(pg.height * 3);
         const c = document.createElement("canvas");
         c.width = W; c.height = H;
-        drawItems(c.getContext("2d")!, items[i], W, H);
+        drawItems(c.getContext("2d")!, list, W, H);
         const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"));
         overlays[i] = new Uint8Array(await blob.arrayBuffer());
       }
@@ -113,7 +115,7 @@ function EditPage() {
           <h1 className="text-3xl text-primary md:text-4xl">تعديل وتوقيع</h1>
           <p className="mt-1 text-muted-foreground">اكتب، وقّع، ارسم وظلّل على صفحات ملفك.</p>
         </div>
-        <FileDrop onFiles={(f) => load(f[0])} />
+        <FileDrop onFiles={(f) => f[0] && load(f[0])} />
       </Shell>
     );
 
@@ -174,7 +176,7 @@ function EditPage() {
                 key={i}
                 page={p}
                 num={i + 1}
-                items={items[i]}
+                items={items[i] ?? []}
                 tool={tool}
                 color={color}
                 textSize={textSize}
@@ -313,8 +315,8 @@ function PageCanvas({
             fontSize: `calc(${textSize} * var(--pw))`,
           }}
           ref={(el) => {
-            if (!el || el.dataset.ready) return;
-            el.dataset.ready = "1";
+            if (!el || el.dataset["ready"]) return;
+            el.dataset["ready"] = "1";
             el.parentElement!.style.setProperty("--pw", `${el.parentElement!.clientWidth}px`);
             requestAnimationFrame(() => el.focus({ preventScroll: true }));
           }}

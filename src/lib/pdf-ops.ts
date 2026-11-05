@@ -59,7 +59,7 @@ export async function organizePdf(bytes: ArrayBuffer, edits: PageEdit[]): Promis
     edits.map((e) => e.index),
   );
   pages.forEach((p, i) => {
-    const r = (((p.getRotation().angle + edits[i].rotation) % 360) + 360) % 360;
+    const r = (((p.getRotation().angle + edits[i]!.rotation) % 360) + 360) % 360;
     p.setRotation(degrees(r));
     out.addPage(p);
   });
