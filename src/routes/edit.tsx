@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Busy, FileDrop, Shell } from "@/components/pdf/Shell";
 import { SignaturePad } from "@/components/pdf/SignaturePad";
 import { drawItems, fontCss, hitTest, measureText, type Item } from "@/lib/annotations";
-import { baseName, downloadBytes, stampOverlays } from "@/lib/pdf-ops";
+import { applyEdits, baseName, downloadBytes, isVectorable, type PageEdits } from "@/lib/pdf-ops";
 import { renderPages, type RenderedPage } from "@/lib/pdf-render";
 
 export const Route = createFileRoute("/edit")({
@@ -88,19 +88,29 @@ function EditPage() {
     try {
       await Promise.all(items.flat().map((it) => (it.kind === "text" ? document.fonts.load(fontCss(it, 20), it.text).catch(() => []) : null)));
       await document.fonts.ready;
-      const overlays: Record<number, Uint8Array> = {};
+      const edits: Record<number, PageEdits> = {};
       for (let i = 0; i < pages.length; i++) {
         const list = items[i] ?? [];
         const pg = pages[i]!;
         if (!list.length) continue;
-        const W = Math.round(pg.width * 4), H = Math.round(pg.height * 4);
-        const c = document.createElement("canvas");
-        c.width = W; c.height = H;
-        drawItems(c.getContext("2d")!, list, W, H);
-        const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"));
-        overlays[i] = new Uint8Array(await blob.arrayBuffer());
+        const e: PageEdits = { rects: [], texts: [] };
+        const raster: Item[] = [];
+        for (const it of list) {
+          if (it.kind === "rect") e.rects.push(it);
+          else if (it.kind === "text" && isVectorable(it.text)) e.texts.push(it);
+          else raster.push(it);
+        }
+        if (raster.length) {
+          const W = Math.round(pg.width * 6), H = Math.round(pg.height * 6);
+          const c = document.createElement("canvas");
+          c.width = W; c.height = H;
+          drawItems(c.getContext("2d")!, raster, W, H);
+          const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/png"));
+          e.overlay = new Uint8Array(await blob.arrayBuffer());
+        }
+        edits[i] = e;
       }
-      downloadBytes(await stampOverlays(file.bytes, overlays), `${baseName(file.name)}-معدّل.pdf`);
+      downloadBytes(await applyEdits(file.bytes, edits), `${baseName(file.name)}-معدّل.pdf`);
       toast.success("تم حفظ الملف");
     } catch (e) {
       console.error(e);
@@ -303,7 +313,7 @@ function PageCanvas({
 
   const editOriginal = (t: RenderedPage["texts"][number], k: number) => {
     if (draft) commitDraft();
-    const pad = 0.002;
+    const pad = 0.004;
     editingIdx.current = k;
     const st = { font: t.font, bold: t.bold, italic: t.italic };
     let size = (t.h / 1.2) * aspect * 0.95;
