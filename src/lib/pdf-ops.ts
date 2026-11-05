@@ -1,4 +1,6 @@
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { hasArabic, toVisual } from "./arabic";
 
 /** Parse "1-3, 5, 8-" style ranges into 0-based page indices (in order, unique). */
 export function parseRanges(input: string, pageCount: number): number[] {
@@ -97,7 +99,14 @@ export type PageEdits = { overlay?: Uint8Array; rects: VecRect[]; texts: VecText
 const AR = /[\u0590-\u08FF\uFB1D-\uFEFF]/;
 /** True when text can be written as real PDF vector text with a standard font. */
 export function isVectorable(text: string) {
-  return !AR.test(text) && /^[\x20-\x7E\u00A0-\u00FF\n]*$/.test(text);
+  if (AR.test(text)) return /^[\x20-\x7E\u00A0-\u00FF\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF\n]*$/.test(text);
+  return /^[\x20-\x7E\u00A0-\u00FF\n]*$/.test(text);
+}
+
+function arabicFontFile(t: VecText) {
+  const f = (t.font ?? "").toLowerCase();
+  const serif = /amiri|serif|naskh|times/.test(f.split(",")[0] ?? "") && !/sans/.test(f.split(",")[0] ?? "");
+  return `/fonts/${serif ? "Amiri" : "IBMPlexSansArabic"}-${t.bold ? "Bold" : "Regular"}.ttf`;
 }
 
 function hex(c: string) {
@@ -128,7 +137,8 @@ function stdFont(t: VecText): StandardFonts {
 export async function applyEdits(bytes: ArrayBuffer, edits: Record<number, PageEdits>): Promise<Uint8Array> {
   const doc = await loadDoc(bytes);
   const pages = doc.getPages();
-  const fonts = new Map<StandardFonts, PDFFont>();
+  doc.registerFontkit(fontkit);
+  const fonts = new Map<string, PDFFont>();
   for (const [k, e] of Object.entries(edits)) {
     const page = pages[Number(k)];
     if (!page) continue;
@@ -137,15 +147,35 @@ export async function applyEdits(bytes: ArrayBuffer, edits: Record<number, PageE
     for (const r of e.rects) page.drawRectangle({ x: bx + r.x * W, y: top - (r.y + r.h) * H, width: r.w * W, height: r.h * H, color: hex(r.color) });
     if (e.overlay) page.drawImage(await doc.embedPng(e.overlay), { x: bx, y: by, width: W, height: H });
     for (const t of e.texts) {
-      const key = stdFont(t);
+      const ar = hasArabic(t.text);
+      const key = ar ? arabicFontFile(t) : stdFont(t);
       let font = fonts.get(key);
-      if (!font) { font = await doc.embedFont(key); fonts.set(key, font); }
+      if (!font) {
+        font = ar
+          ? await doc.embedFont(await (await fetch(key)).arrayBuffer(), { subset: false })
+          : await doc.embedFont(key as StandardFonts);
+        fonts.set(key, font);
+      }
       const size = t.size * W;
       const asc = font.heightAtSize(size, { descender: false });
-      t.text.split("\n").forEach((line, i) => {
-        const w = font!.widthOfTextAtSize(line, size);
-        const x = bx + t.x * W - (t.ltr === false ? w : 0);
-        page.drawText(line, { x, y: top - t.y * H - asc - i * size * 1.3, size, font: font!, color: hex(t.color) });
+      t.text.split("\n").forEach((raw, i) => {
+        const y = top - t.y * H - asc - i * size * 1.3;
+        const color = hex(t.color);
+        if (!ar) {
+          const w = font!.widthOfTextAtSize(raw, size);
+          page.drawText(raw, { x: bx + t.x * W - (t.ltr === false ? w : 0), y, size, font: font!, color });
+          return;
+        }
+        // Arabic: place each joined glyph ourselves in visual order, so the font
+        // engine's own direction guessing can't flip the line.
+        const chars = [...toVisual(raw)];
+        const widths = chars.map((c) => font!.widthOfTextAtSize(c, size));
+        const w = widths.reduce((a, b) => a + b, 0);
+        let x = bx + t.x * W - (t.ltr === false ? w : 0);
+        chars.forEach((c, j) => {
+          if (c.trim()) page.drawText(c, { x, y, size, font: font!, color });
+          x += widths[j]!;
+        });
       });
     }
   }

@@ -29,4 +29,4 @@ use the editor.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
 
-- PDF processing runs entirely in the browser (pdf-lib for writing, pdfjs-dist lazily imported for rendering); annotations are stamped as a transparent PNG overlay so Arabic text shapes correctly without embedding fonts.
+- PDF processing runs entirely in the browser (pdf-lib for writing, pdfjs-dist lazily imported for rendering); edited text (Latin and Arabic) is written as real vector text — Arabic via bundled TTFs in public/fonts, pre-shaped and placed glyph-by-glyph in visual order because pdf-lib cannot shape or reliably order RTL; drawings/signatures stay a PNG overlay.
