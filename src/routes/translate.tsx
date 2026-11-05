@@ -42,7 +42,7 @@ function TranslatePage() {
       let name: string;
       if (isXlsx) {
         const blob = await lib.translateXlsx(await f.arrayBuffer(), tr, progress);
-        name = `${baseName(f.name)}-EN.xlsx`;
+        name = `${f.name.replace(/\.xlsx$/i, "")}-EN.xlsx`;
         downloadBytes(blob, name);
       } else {
         const bytes = await f.arrayBuffer();

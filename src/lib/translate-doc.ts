@@ -46,12 +46,13 @@ export function pdfEdits(pages: RenderedPage[], t: (s: string) => string): Recor
       // size as fraction of page width; shrink so the English fits the original line width
       let size = (line.h * p.height * 0.82) / p.width;
       const avg = line.bold ? 0.56 : 0.52;
-      const maxW = Math.max(line.w, 0.05);
-      if (en.length * avg * size > maxW) size = Math.max(maxW / (en.length * avg), size * 0.45);
-      const ltrX = line.rtl ? line.x : line.x; // English always left-aligned at the line's left edge
+      // English may run a little wider than the Arabic it replaces before we shrink it
+      const maxW = Math.max(line.w * 1.35, 0.05);
+      if (en.length * avg * size > maxW) size = Math.max(maxW / (en.length * avg), size * 0.6);
+      // RTL lines keep their right edge so table columns stay aligned and nothing runs off the page
       e.texts.push({
-        x: ltrX, y: line.y + line.h * 0.08, text: en, size, color: line.fg,
-        font: line.font.replace(/Amiri|IBM Plex Sans Arabic/g, ""), bold: line.bold, italic: line.italic, ltr: true,
+        x: line.rtl ? line.x + line.w : line.x, ltr: !line.rtl, y: line.y + line.h * 0.08, text: en, size, color: line.fg,
+        font: line.font.replace(/Amiri|IBM Plex Sans Arabic/g, ""), bold: line.bold, italic: line.italic,
       });
     }
     if (e.rects.length) edits[i] = e;
