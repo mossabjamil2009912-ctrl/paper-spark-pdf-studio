@@ -124,16 +124,16 @@ function EditPage() {
     <Shell>
       <div className="sticky top-[61px] z-20 border-b bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-2">
-          <div className="flex gap-1 overflow-x-auto">
+          <div className="-mx-1 flex w-full gap-1 overflow-x-auto px-1 md:w-auto">
             {tools.map((t) => (
               <button
                 key={t.id}
                 onClick={() => pickTool(t.id)}
-                className={`flex min-w-14 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                className={`flex min-w-12 shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[11px] md:min-w-14 md:px-2 md:py-1.5 md:text-xs transition-colors ${
                   tool === t.id ? "bg-primary text-primary-foreground" : "hover:bg-secondary"
                 }`}
               >
-                <t.icon className="h-5 w-5" />
+                <t.icon className="h-4 w-4 md:h-5 md:w-5" />
                 {t.label}
               </button>
             ))}
@@ -219,7 +219,9 @@ function PageCanvas({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef<Item | null>(null);
-  const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; color?: string; bg?: string; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
+  const [edited, setEdited] = useState<Set<number>>(new Set());
+  const editingIdx = useRef<number | null>(null);
   const [tick, setTick] = useState(0);
   const aspect = page.height / page.width;
 
@@ -246,10 +248,16 @@ function PageCanvas({
   const commitDraft = () => {
     const size = draft?.size ?? textSize;
     const cover = draft?.cover;
-    const txt = draft?.text.trim() ? [{ kind: "text" as const, x: draft!.x, y: draft!.y, text: draft!.text, size, color, w: measureText(draft!.text, size) }] : [];
-    if (cover) onAdd({ kind: "rect", ...cover, color: "#ffffff" }, ...txt);
+    const c = draft?.color ?? color;
+    const txt = draft?.text.trim() ? [{ kind: "text" as const, x: draft!.x, y: draft!.y, text: draft!.text, size, color: c, w: measureText(draft!.text, size) }] : [];
+    if (cover) {
+      onAdd({ kind: "rect", ...cover, color: draft?.bg ?? "#ffffff" }, ...txt);
+      const k = editingIdx.current;
+      if (k !== null) setEdited((s) => new Set(s).add(k));
+    }
     else if (txt.length) onAdd(...txt);
     setDraft(null);
+    editingIdx.current = null;
   };
 
   const onDown = (e: React.PointerEvent) => {
@@ -289,11 +297,12 @@ function PageCanvas({
     }
   };
 
-  const editOriginal = (t: RenderedPage["texts"][number]) => {
+  const editOriginal = (t: RenderedPage["texts"][number], k: number) => {
     if (draft) commitDraft();
     const pad = 0.002;
+    editingIdx.current = k;
     setDraft({
-      x: t.x + t.w, y: t.y, text: t.str, size: (t.h / 1.2) * aspect,
+      x: t.x + t.w, y: t.y, text: t.str, size: (t.h / 1.2) * aspect * 0.95, color: t.fg, bg: t.bg,
       cover: { x: t.x - pad, y: t.y - pad, w: t.w + pad * 2, h: t.h + pad * 2 },
     });
   };
@@ -311,13 +320,13 @@ function PageCanvas({
         onPointerUp={onUp}
         onPointerCancel={onUp}
       />
-      {tool === "edittext" && !draft && page.texts.map((t, k) => (
+      {tool === "edittext" && !draft && page.texts.map((t, k) => !edited.has(k) && (
         <button
           key={k}
           type="button"
           title={t.str}
-          onClick={() => editOriginal(t)}
-          className="absolute rounded-sm outline-1 outline-accent/40 hover:bg-accent/20 hover:outline-accent"
+          onClick={() => editOriginal(t, k)}
+          className="absolute rounded-sm transition-colors hover:bg-accent/20 hover:outline hover:outline-1 hover:outline-accent active:bg-accent/30"
           style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%`, width: `${t.w * 100}%`, height: `${t.h * 100}%` }}
         />
       ))}
@@ -332,11 +341,12 @@ function PageCanvas({
           }}
           onBlur={commitDraft}
           placeholder="اكتب هنا…"
-          className="absolute min-w-40 resize rounded border border-accent bg-paper p-0 leading-[1.3] outline-none"
+          className="absolute min-w-24 resize rounded border border-accent p-0 leading-[1.3] outline-none"
           style={{
             right: `${(1 - draft.x) * 100}%`,
             top: `${draft.y * 100}%`,
-            color,
+            color: draft.color ?? color,
+            background: draft.bg ?? "var(--paper, #fff)",
             fontSize: `calc(${draft.size ?? textSize} * var(--pw))`, fontFamily: "Amiri, serif",
           }}
           ref={(el) => {
