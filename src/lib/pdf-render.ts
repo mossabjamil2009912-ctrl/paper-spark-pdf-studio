@@ -121,7 +121,7 @@ export function groupLines(items: Box[]): Box[] {
 const hex = (r: number, g: number, b: number) => "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
 
 /** Background = most common colour on the box edge; foreground = pixel inside most unlike it. */
-function sampleColors(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+export function sampleColors(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   try {
     const pad = 2;
     const X = Math.max(0, Math.floor(x - pad)), Y = Math.max(0, Math.floor(y - pad));

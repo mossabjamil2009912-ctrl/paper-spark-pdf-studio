@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine } from "lucide-react";
+import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Busy, FileDrop, Shell } from "@/components/pdf/Shell";
 import { SignaturePad } from "@/components/pdf/SignaturePad";
 import { drawItems, fontCss, hitTest, measureText, type Item } from "@/lib/annotations";
 import { applyEdits, baseName, downloadBytes, isVectorable, type PageEdits } from "@/lib/pdf-ops";
-import { renderPages, type RenderedPage } from "@/lib/pdf-render";
+import { renderPages, sampleColors, type RenderedPage } from "@/lib/pdf-render";
 
 export const Route = createFileRoute("/edit")({
   head: () => ({
@@ -23,11 +23,12 @@ export const Route = createFileRoute("/edit")({
   component: EditPage,
 });
 
-type Tool = "none" | "edittext" | "text" | "pen" | "highlight" | "sign" | "erase";
+type Tool = "none" | "edittext" | "area" | "text" | "pen" | "highlight" | "sign" | "erase";
 const COLORS = ["#111827", "#1d4ed8", "#c2410c", "#15803d", "#facc15"] as const;
 const tools: { id: Tool; label: string; icon: typeof Pen }[] = [
   { id: "none", label: "تصفح", icon: MousePointer2 },
   { id: "edittext", label: "تعديل النص", icon: FilePenLine },
+  { id: "area", label: "تحديد حر", icon: SquareDashedMousePointer },
   { id: "text", label: "نص", icon: Type },
   { id: "sign", label: "توقيع", icon: Signature },
   { id: "pen", label: "قلم", icon: Pen },
@@ -176,6 +177,9 @@ function EditPage() {
         {tool === "edittext" && (
           <p className="pb-2 text-center text-xs text-muted-foreground">انقر على أي نص في الصفحة لتعديله</p>
         )}
+        {tool === "area" && (
+          <p className="pb-2 text-center text-xs text-muted-foreground">اسحب مربعاً فوق أي كلمة أو جزء من الصفحة لمسحه وكتابة بديل</p>
+        )}
         {tool === "sign" && sig && (
           <p className="pb-2 text-center text-xs text-muted-foreground">انقر على الصفحة لوضع التوقيع · <button className="underline" onClick={() => setPadOpen(true)}>توقيع جديد</button></p>
         )}
@@ -234,6 +238,7 @@ function PageCanvas({
   const [edited, setEdited] = useState<Set<number>>(new Set());
   const editingIdx = useRef<number | null>(null);
   const [tick, setTick] = useState(0);
+  const [sel, setSel] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const aspect = page.height / page.width;
 
   const redraw = useCallback(() => {
@@ -274,8 +279,41 @@ function PageCanvas({
     editingIdx.current = null;
   };
 
+  const finishArea = async (s: { x0: number; y0: number; x1: number; y1: number }) => {
+    const x = Math.min(s.x0, s.x1), y = Math.min(s.y0, s.y1);
+    const w = Math.abs(s.x1 - s.x0), h = Math.abs(s.y1 - s.y0);
+    if (w < 0.01 || h < 0.005) return;
+    const img = new Image();
+    img.src = page.src;
+    await img.decode().catch(() => {});
+    const cv = document.createElement("canvas");
+    cv.width = img.naturalWidth || 1; cv.height = img.naturalHeight || 1;
+    const ctx = cv.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    const c = sampleColors(ctx, x * cv.width, y * cv.height, w * cv.width, h * cv.height);
+    // Prefill with any detected text inside the box (useful for tables).
+    const inside = page.texts.filter((t) => t.x + t.w / 2 > x && t.x + t.w / 2 < x + w && t.y + t.h / 2 > y && t.y + t.h / 2 < y + h);
+    const first = inside[0];
+    const text = inside.map((t) => t.str).join(" ");
+    const rtl = first ? first.rtl : true;
+    const size = Math.max(0.008, Math.min(h * aspect * 0.8, first ? (first.h / 1.2) * aspect * 0.95 : 1));
+    editingIdx.current = null;
+    setDraft({
+      x: rtl ? x + w : x, y, text, size, color: c.fg, bg: c.bg, ltr: !rtl,
+      font: first?.font, bold: first?.bold, italic: first?.italic,
+      cover: { x, y, w, h },
+    });
+  };
+
   const onDown = (e: React.PointerEvent) => {
     const [x, y] = pt(e);
+    if (tool === "area") {
+      e.preventDefault();
+      if (draft) { commitDraft(); return; }
+      setSel({ x0: x, y0: y, x1: x, y1: y });
+      (e.target as Element).setPointerCapture(e.pointerId);
+      return;
+    }
     if (tool === "pen" || tool === "highlight") {
       live.current = tool === "pen"
         ? { kind: "path", points: [[x, y]], color, width: 0.003, alpha: 1 }
@@ -299,12 +337,14 @@ function PageCanvas({
   };
 
   const onMove = (e: React.PointerEvent) => {
+    if (sel) { const [x, y] = pt(e); setSel({ ...sel, x1: x, y1: y }); return; }
     if (live.current?.kind !== "path") return;
     live.current.points.push(pt(e));
     redraw();
   };
 
   const onUp = () => {
+    if (sel) { const s = sel; setSel(null); void finishArea(s); return; }
     if (live.current) {
       onAdd(live.current);
       live.current = null;
@@ -325,7 +365,7 @@ function PageCanvas({
     });
   };
 
-  const drawing = tool === "pen" || tool === "highlight";
+  const drawing = tool === "pen" || tool === "highlight" || tool === "area";
 
   return (
     <div className="relative bg-paper shadow-paper">
@@ -338,6 +378,12 @@ function PageCanvas({
         onPointerUp={onUp}
         onPointerCancel={onUp}
       />
+      {sel && (
+        <div
+          className="pointer-events-none absolute border-2 border-dashed border-accent bg-accent/10"
+          style={{ left: `${Math.min(sel.x0, sel.x1) * 100}%`, top: `${Math.min(sel.y0, sel.y1) * 100}%`, width: `${Math.abs(sel.x1 - sel.x0) * 100}%`, height: `${Math.abs(sel.y1 - sel.y0) * 100}%` }}
+        />
+      )}
       {tool === "edittext" && !draft && page.texts.map((t, k) => !edited.has(k) && (
         <button
           key={k}
