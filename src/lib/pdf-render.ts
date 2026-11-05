@@ -27,12 +27,14 @@ export function cssFontFor(name: string, generic: string, rtl: boolean): string 
   if (isSerif) return rtl ? '"Amiri", "Noto Serif", serif' : '"Noto Serif", "Times New Roman", "Amiri", serif';
   return rtl ? '"IBM Plex Sans Arabic", "Noto Sans", sans-serif' : '"Noto Sans", Arial, "IBM Plex Sans Arabic", sans-serif';
 }
-export type RenderedPage = { src: string; width: number; height: number; texts: PageText[] };
+/** Raw text fragment in PDF points (top-left origin) with sampled colours. */
+export type Frag = { str: string; x: number; y: number; w: number; h: number; fontName: string; generic: string; fg: string; bg: string };
+export type RenderedPage = { src: string; width: number; height: number; texts: PageText[]; frags: Frag[] };
 
 /** Render each page to a JPEG data URL. width/height are the displayed size in PDF points. */
 export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<RenderedPage[]> {
   const pdfjs = await getPdfjs();
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)) });
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(bytes.slice(0)), fontExtraProperties: true });
   const doc = await loadingTask.promise;
   const out: RenderedPage[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
@@ -75,7 +77,9 @@ export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<Render
       return { str: l.str, x: l.x / base.width, y: l.y / base.height, w: l.w / base.width, h: (l.h * 1.2) / base.height, ...c,
         font: cssFontFor(fn, l.generic ?? "sans-serif", rtl), bold, italic, rtl };
     });
-    out.push({ texts, src: canvas.toDataURL("image/jpeg", 0.85), width: base.width, height: base.height });
+    const frags: Frag[] = raw.map((b) => ({ str: b.str, x: b.x, y: b.y, w: b.w, h: b.h, fontName: b.fontName ?? "", generic: b.generic ?? "sans-serif",
+      ...sampleColors(ctx, b.x * scale, b.y * scale, b.w * scale, b.h * 1.15 * scale) }));
+    out.push({ texts, frags, src: canvas.toDataURL("image/jpeg", 0.85), width: base.width, height: base.height });
     page.cleanup();
   }
   await loadingTask.destroy();

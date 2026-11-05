@@ -30,3 +30,4 @@ use the editor.
 <!-- LOVABLE:END -->
 
 - PDF processing runs entirely in the browser (pdf-lib for writing, pdfjs-dist lazily imported for rendering); edited text (Latin and Arabic) is written as real vector text — Arabic via bundled TTFs in public/fonts, pre-shaped and placed glyph-by-glyph in visual order because pdf-lib cannot shape or reliably order RTL; drawings/signatures stay a PNG overlay.
+- PDF↔Excel conversion (src/lib/excel-convert.ts) runs in the browser with lazily imported exceljs: PDF text fragments are laid on a grid (lines→rows, shared x-gaps→columns) with sampled colours; Excel→PDF draws fills, borders and vector text with the bundled IBM Plex Sans Arabic font. pdfjs needs fontExtraProperties:true to expose real font names (bold detection).

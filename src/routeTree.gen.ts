@@ -11,8 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EditRouteImport } from './routes/edit'
+import { Route as ExcelToPdfRouteImport } from './routes/excel-to-pdf'
 import { Route as MergeRouteImport } from './routes/merge'
 import { Route as OrganizeRouteImport } from './routes/organize'
+import { Route as PdfToExcelRouteImport } from './routes/pdf-to-excel'
 import { Route as SplitRouteImport } from './routes/split'
 
 const IndexRoute = IndexRouteImport.update({
@@ -25,6 +27,11 @@ const EditRoute = EditRouteImport.update({
   path: '/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ExcelToPdfRoute = ExcelToPdfRouteImport.update({
+  id: '/excel-to-pdf',
+  path: '/excel-to-pdf',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MergeRoute = MergeRouteImport.update({
   id: '/merge',
   path: '/merge',
@@ -33,6 +40,11 @@ const MergeRoute = MergeRouteImport.update({
 const OrganizeRoute = OrganizeRouteImport.update({
   id: '/organize',
   path: '/organize',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PdfToExcelRoute = PdfToExcelRouteImport.update({
+  id: '/pdf-to-excel',
+  path: '/pdf-to-excel',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SplitRoute = SplitRouteImport.update({
@@ -44,38 +56,68 @@ const SplitRoute = SplitRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/edit': typeof EditRoute
+  '/excel-to-pdf': typeof ExcelToPdfRoute
   '/merge': typeof MergeRoute
   '/organize': typeof OrganizeRoute
+  '/pdf-to-excel': typeof PdfToExcelRoute
   '/split': typeof SplitRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/edit': typeof EditRoute
+  '/excel-to-pdf': typeof ExcelToPdfRoute
   '/merge': typeof MergeRoute
   '/organize': typeof OrganizeRoute
+  '/pdf-to-excel': typeof PdfToExcelRoute
   '/split': typeof SplitRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/edit': typeof EditRoute
+  '/excel-to-pdf': typeof ExcelToPdfRoute
   '/merge': typeof MergeRoute
   '/organize': typeof OrganizeRoute
+  '/pdf-to-excel': typeof PdfToExcelRoute
   '/split': typeof SplitRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/edit' | '/merge' | '/organize' | '/split'
+  fullPaths:
+    | '/'
+    | '/edit'
+    | '/excel-to-pdf'
+    | '/merge'
+    | '/organize'
+    | '/pdf-to-excel'
+    | '/split'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/edit' | '/merge' | '/organize' | '/split'
-  id: '__root__' | '/' | '/edit' | '/merge' | '/organize' | '/split'
+  to:
+    | '/'
+    | '/edit'
+    | '/excel-to-pdf'
+    | '/merge'
+    | '/organize'
+    | '/pdf-to-excel'
+    | '/split'
+  id:
+    | '__root__'
+    | '/'
+    | '/edit'
+    | '/excel-to-pdf'
+    | '/merge'
+    | '/organize'
+    | '/pdf-to-excel'
+    | '/split'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   EditRoute: typeof EditRoute
+  ExcelToPdfRoute: typeof ExcelToPdfRoute
   MergeRoute: typeof MergeRoute
   OrganizeRoute: typeof OrganizeRoute
+  PdfToExcelRoute: typeof PdfToExcelRoute
   SplitRoute: typeof SplitRoute
 }
 
@@ -95,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/excel-to-pdf': {
+      id: '/excel-to-pdf'
+      path: '/excel-to-pdf'
+      fullPath: '/excel-to-pdf'
+      preLoaderRoute: typeof ExcelToPdfRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/merge': {
       id: '/merge'
       path: '/merge'
@@ -107,6 +156,13 @@ declare module '@tanstack/react-router' {
       path: '/organize'
       fullPath: '/organize'
       preLoaderRoute: typeof OrganizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pdf-to-excel': {
+      id: '/pdf-to-excel'
+      path: '/pdf-to-excel'
+      fullPath: '/pdf-to-excel'
+      preLoaderRoute: typeof PdfToExcelRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/split': {
@@ -122,8 +178,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   EditRoute: EditRoute,
+  ExcelToPdfRoute: ExcelToPdfRoute,
   MergeRoute: MergeRoute,
   OrganizeRoute: OrganizeRoute,
+  PdfToExcelRoute: PdfToExcelRoute,
   SplitRoute: SplitRoute,
 }
 export const routeTree = rootRouteImport

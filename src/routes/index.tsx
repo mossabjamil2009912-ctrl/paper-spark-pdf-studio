@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Combine, FileText, Layers, PenTool, Scissors, ShieldCheck } from "lucide-react";
+import { Combine, FileSpreadsheet, Sheet, FileText, Layers, PenTool, Scissors, ShieldCheck } from "lucide-react";
 import { Shell } from "@/components/pdf/Shell";
 
 export const Route = createFileRoute("/")({
@@ -21,6 +21,8 @@ const tools = [
   { to: "/merge", icon: Combine, title: "دمج الملفات", desc: "اجمع عدة ملفات في ملف واحد بالترتيب الذي تريده." },
   { to: "/split", icon: Scissors, title: "تقسيم الملف", desc: "استخرج صفحات محددة أو افصل كل صفحة في ملف." },
   { to: "/organize", icon: Layers, title: "ترتيب الصفحات", desc: "دوّر، احذف وأعد ترتيب الصفحات." },
+  { to: "/pdf-to-excel", icon: FileSpreadsheet, title: "PDF إلى Excel", desc: "حوّل الجداول والنصوص إلى خلايا قابلة للتعديل." },
+  { to: "/excel-to-pdf", icon: Sheet, title: "Excel إلى PDF", desc: "حوّل جدولك إلى PDF بنفس التنسيق." },
 ] as const;
 
 function Index() {

@@ -7,6 +7,8 @@ const nav = [
   { to: "/merge", label: "دمج" },
   { to: "/split", label: "تقسيم" },
   { to: "/organize", label: "الصفحات" },
+  { to: "/pdf-to-excel", label: "إلى Excel" },
+  { to: "/excel-to-pdf", label: "Excel إلى PDF" },
 ] as const;
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -52,7 +54,11 @@ export function FileDrop({
   onFiles,
   multiple,
   label = "اختر ملف PDF",
+  accept = "application/pdf,.pdf",
+  exts = [".pdf"],
 }: {
+  accept?: string;
+  exts?: string[];
   onFiles: (files: File[]) => void;
   multiple?: boolean;
   label?: string;
@@ -61,7 +67,7 @@ export function FileDrop({
   const [over, setOver] = useState(false);
   const take = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter(
-      (f) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"),
+      (f) => exts.some((x) => f.name.toLowerCase().endsWith(x)),
     );
     if (files.length) onFiles(multiple ? files : files.slice(0, 1));
   };
@@ -93,7 +99,7 @@ export function FileDrop({
       <input
         ref={ref}
         type="file"
-        accept="application/pdf,.pdf"
+        accept={accept}
         multiple={multiple}
         hidden
         onChange={(e) => {
