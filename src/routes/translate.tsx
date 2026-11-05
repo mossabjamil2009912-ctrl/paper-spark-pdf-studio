@@ -75,7 +75,7 @@ function TranslatePage() {
       {busy ? (
         <Busy text={busy} />
       ) : (
-        <FileDrop onFiles={(fs) => fs[0] && run(fs[0])} label="اختر ملف PDF أو Excel" accept="application/pdf,.pdf,.xlsx" />
+        <FileDrop onFiles={(fs) => fs[0] && run(fs[0])} label="اختر ملف PDF أو Excel" accept="application/pdf,.pdf,.xlsx" exts={[".pdf", ".xlsx"]} />
       )}
       {done && (
         <p className="mx-auto mt-6 flex max-w-6xl items-center gap-2 px-4 text-accent">

@@ -13,7 +13,7 @@ Rules:
 - Return exactly one translation per input, same order, same count.`;
 
 export const translateSegments = createServerFn({ method: "POST" })
-  .inputValidator((d) =>
+  .validator((d) =>
     z.object({ segments: z.array(z.string().max(2000)).min(1).max(150), context: z.string().max(4000).optional() }).parse(d),
   )
   .handler(async ({ data }) => {
