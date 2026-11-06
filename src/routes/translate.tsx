@@ -76,14 +76,6 @@ function TranslatePage() {
   return (
     <Shell>
       <PageTitle title={fixed ? (target === "ar" ? "ترجمة إلى العربية" : "ترجمة إلى الإنجليزية") : "ترجمة الملفات"} sub="ترجمة متخصصة تراعي مصطلحات مجال الملف وتحافظ على الأرقام والرموز والتنسيق — وليست ترجمة حرفية." />
-      <div className={`mx-auto mb-4 max-w-6xl gap-2 px-4 ${fixed ? "hidden" : "flex"}`}>
-        {([["en", "إلى الإنجليزية"], ["ar", "إلى العربية"]] as const).map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setTarget(k)}
-            className={`rounded-full border px-4 py-2 text-sm ${target === k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"}`}>
-            {l}
-          </button>
-        ))}
-      </div>
       {target === "ar" && (
         <p className="mx-auto mb-2 max-w-6xl px-4 text-sm text-muted-foreground">تبقى المصطلحات التقنية والاختصارات والرموز والأرقام بالإنجليزية كما هي.</p>
       )}
