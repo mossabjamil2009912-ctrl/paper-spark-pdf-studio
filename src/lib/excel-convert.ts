@@ -102,27 +102,76 @@ export function layoutPage(page: Pick<RenderedPage, "frags" | "width" | "height"
   const lines: Frag[][] = [];
   for (const f of sorted) {
     const l = lines[lines.length - 1];
-    const lb = l ? Math.max(...l.map((g) => g.y + g.h)) : 0;
-    if (l && Math.abs(lb - (f.y + f.h)) < Math.max(f.h, l[0]!.h) * 0.45) l.push(f);
+    // compare with the nearest baseline in the line, using the smaller text height,
+    // so one big title never swallows the small lines below it
+    const near = l ? Math.min(...l.map((g) => Math.abs(g.y + g.h - (f.y + f.h)))) : Infinity;
+    const lh = l ? Math.min(...l.map((g) => g.h)) : 0;
+    if (l && near < Math.min(f.h, lh) * 0.45) l.push(f);
     else lines.push([f]);
   }
   const rows = lines.map(segmentsOfLine);
   // Column separators: x-gaps not covered by any segment of a multi-segment line.
-  const multi = rows.filter((r) => r.length > 1).flat();
-  const ivs = multi.map((s) => [s.x, s.r] as [number, number]).sort((a, b) => a[0] - b[0]);
-  const bands: [number, number][] = [];
-  for (const iv of ivs) {
-    const b = bands[bands.length - 1];
-    if (b && iv[0] <= b[1] + 1.5) b[1] = Math.max(b[1], iv[1]);
-    else bands.push([iv[0], iv[1]]);
-  }
+  // A few long cells (e.g. a wide certification line) may cross a column gap; they get merged later.
+  // Each block of the page (separated by larger vertical gaps) gets its own columns,
+  // then all blocks share one grid (union of cuts) — e.g. a 2-column spec table above an 11-column matrix.
+  const cutsOf = (blockRows: Seg[][]) => {
+    const multiRows = blockRows.filter((r) => r.length > 1);
+    const multi = multiRows.flat();
+    const out: number[] = [];
+    if (!multi.length) return out;
+    const W = Math.ceil(page.width);
+    const cover = new Array<number>(W + 2).fill(0);
+    for (const s of multi) for (let x = Math.max(0, Math.floor(s.x)); x <= Math.min(W, Math.ceil(s.r)); x++) cover[x]!++;
+    const allow = Math.floor(multiRows.length * 0.08);
+    const minX = Math.min(...multi.map((s) => s.x)), maxX = Math.max(...multi.map((s) => s.r));
+    let start = -1;
+    for (let x = Math.ceil(minX); x <= Math.floor(maxX) + 1; x++) {
+      const free = x <= maxX && cover[x]! <= allow;
+      if (free && start < 0) start = x;
+      if (!free && start >= 0) { if (x - start >= 2) out.push((start + x) / 2); start = -1; }
+    }
+    return out;
+  };
+  const bases = rows.map((r) => Math.max(...r.map((s) => s.base)));
+  const gaps = bases.slice(1).map((b, i) => b - bases[i]!).sort((a, b) => a - b);
+  const med = gaps.length ? gaps[Math.floor(gaps.length / 2)]! : 0;
+  const blocks: Seg[][][] = [];
+  rows.forEach((r, i) => {
+    if (!i || bases[i]! - bases[i - 1]! > Math.max(med * 1.6, 14)) blocks.push([]);
+    blocks[blocks.length - 1]!.push(r);
+  });
+  const all = blocks.flatMap(cutsOf).sort((a, b) => a - b);
   let cuts: number[] = [];
-  if (bands.length > 1) for (let i = 1; i < bands.length; i++) cuts.push((bands[i - 1]![1] + bands[i]![0]) / 2);
+  for (const c of all) if (!cuts.length || c - cuts[cuts.length - 1]! > 6) cuts.push(c);
   cuts = [0, ...cuts, page.width];
   const cols = cuts.slice(0, -1).map((c, i) => [c, cuts[i + 1]!] as [number, number]);
   const chars = frags.map((f) => f.str).join("");
   const rtl = (chars.match(/[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/g)?.length ?? 0) > (chars.match(/[A-Za-z]/g)?.length ?? 0);
   return { rows, cols, rtl };
+}
+
+/** Sample the rendered page picture: returns a solid non-white colour at (x,y) in PDF points, or null. */
+async function pagePicker(page: RenderedPage): Promise<((x: number, y: number, w: number) => string | null) | null> {
+  if (typeof document === "undefined" || !page.src) return null;
+  try {
+    const img = new Image();
+    img.src = page.src;
+    await img.decode();
+    const cv = document.createElement("canvas");
+    cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+    const ctx = cv.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    const k = cv.width / page.width;
+    return (x, y, w) => {
+      const half = Math.max(1, Math.min(w * 0.3, 15)) * k;
+      const px = (xx: number) => { const d = ctx.getImageData(Math.round(xx), Math.round(y * k), 1, 1).data; return [d[0]!, d[1]!, d[2]!]; };
+      const pts = [px(x * k - half), px(x * k), px(x * k + half)];
+      const [a] = pts;
+      const same = pts.every((p) => p.every((v, i) => Math.abs(v - a![i]!) < 18));
+      const hex = "#" + a!.map((v) => v.toString(16).padStart(2, "0")).join("");
+      return same && !nearWhite(hex) && a!.some((v) => v < 225) ? hex : null;
+    };
+  } catch { return null; }
 }
 
 export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Promise<Blob> {
@@ -131,8 +180,9 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
   wb.creator = "حبر";
   let ws: import("exceljs").Worksheet | null = null;
   let rowOffset = 0;
-  pages.forEach((page, pi) => {
+  for (const [pi, page] of pages.entries()) {
     const { rows, cols, rtl } = layoutPage(page);
+    const pick = await pagePicker(page);
     if (perPageSheets || !ws) {
       ws = wb.addWorksheet(perPageSheets ? `صفحة ${pi + 1}` : "الملف", {
         views: [{ rightToLeft: rtl, showGridLines: false }],
@@ -203,6 +253,16 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
           for (let c = span[0]; c <= span[1]; c++) used.add(c);
         }
       }
+      // coloured boxes without text (e.g. configuration matrix) keep their colour
+      if (pick) {
+        const top = Math.min(...segs.map((s) => s.y)), mid = (top + base) / 2;
+        cols.forEach((c, i) => {
+          const col = rtl ? cols.length - i : i + 1;
+          if (used.has(col) || c[1] - c[0] < 4) return;
+          const hex = pick((c[0] + c[1]) / 2, mid, c[1] - c[0]);
+          if (hex) sheet.getCell(rowNo, col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(hex) } };
+        });
+      }
     });
     // pictures: anchor each at its original spot over the grid
     const toXl = (y: number) => {
@@ -235,7 +295,7 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
       sheet.addImage(id, { tl: { col: colF, row: rowOffset + rowF } as never, ext: { width: wPt / 0.75, height: hPt / 0.75 }, editAs: "oneCell" });
     }
     rowOffset += rowTops.length + 1;
-  });
+  }
   if (!wb.worksheets.length) wb.addWorksheet("صفحة 1");
   const buf = await wb.xlsx.writeBuffer();
   return new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
