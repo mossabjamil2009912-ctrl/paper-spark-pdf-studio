@@ -137,8 +137,8 @@ function Compress() {
           </>
         )}
         {res && !busy && (
-          <p className="mt-6 flex items-center gap-2 text-accent">
-            <FileDown className="h-5 w-5" />
+          <p className="mt-6 flex min-w-0 items-start gap-2 text-accent [overflow-wrap:anywhere]">
+            <FileDown className="h-5 w-5 shrink-0" />
             {kind === "audio"
               ? `تم تنزيل ${res.name} (${fmt(res.after)})`
               : res.after < res.before
