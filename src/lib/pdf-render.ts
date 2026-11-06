@@ -104,6 +104,7 @@ export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<Render
         }
       }
     } catch (e) { console.warn(e); }
+    try { images.push(...drawnRegions(canvas, scale, base.width, base.height, raw, images)); } catch (e) { console.warn(e); }
     out.push({ images, texts, frags, src: canvas.toDataURL("image/jpeg", 0.85), width: base.width, height: base.height });
     page.cleanup();
   }
@@ -208,3 +209,59 @@ export function sampleColors(ctx: CanvasRenderingContext2D, x: number, y: number
     return { bg: "#ffffff", fg: "#111111" };
   }
 }
+
+/** Vector-drawn logos/titles/shapes (not text, not raster images) captured as picture regions. */
+function drawnRegions(canvas: HTMLCanvasElement, scale: number, pw: number, ph: number,
+  texts: { x: number; y: number; w: number; h: number }[], imgs: { x: number; y: number; w: number; h: number }[]) {
+  const ctx = canvas.getContext("2d")!;
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const G = 4; // grid cell in PDF points
+  const gw = Math.ceil(pw / G), gh = Math.ceil(ph / G);
+  const masked = new Uint8Array(gw * gh);
+  const mark = (r: { x: number; y: number; w: number; h: number }, pad: number) => {
+    for (let gy = Math.max(0, Math.floor((r.y - pad) / G)); gy < Math.min(gh, Math.ceil((r.y + r.h + pad) / G)); gy++)
+      for (let gx = Math.max(0, Math.floor((r.x - pad) / G)); gx < Math.min(gw, Math.ceil((r.x + r.w + pad) / G)); gx++) masked[gy * gw + gx] = 1;
+  };
+  texts.forEach((t) => mark(t, 1));
+  imgs.forEach((t) => mark(t, 0));
+  const ink = new Uint8Array(gw * gh);
+  const cell = G * scale;
+  const step = Math.max(1, Math.floor(cell / 4));
+  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+    if (masked[gy * gw + gx]) continue;
+    const x0 = Math.floor(gx * cell), y0 = Math.floor(gy * cell);
+    let n = 0;
+    for (let y = y0; y < Math.min(canvas.height, y0 + cell); y += step)
+      for (let x = x0; x < Math.min(canvas.width, x0 + cell); x += step) {
+        const i = (y * canvas.width + x) * 4;
+        if (255 * 3 - data[i]! - data[i + 1]! - data[i + 2]! > 90) n++;
+      }
+    if (n >= 2) ink[gy * gw + gx] = 1;
+  }
+  const seen = new Uint8Array(gw * gh);
+  const out: { x: number; y: number; w: number; h: number; src: string }[] = [];
+  for (let s = 0; s < ink.length; s++) {
+    if (!ink[s] || seen[s]) continue;
+    let x1 = gw, y1 = gh, x2 = 0, y2 = 0, cnt = 0;
+    const q = [s]; seen[s] = 1;
+    while (q.length) {
+      const k = q.pop()!; const kx = k % gw, ky = (k - kx) / gw; cnt++;
+      x1 = Math.min(x1, kx); x2 = Math.max(x2, kx); y1 = Math.min(y1, ky); y2 = Math.max(y2, ky);
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const nx = kx + dx, ny = ky + dy;
+        if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+        const j = ny * gw + nx;
+        if (ink[j] && !seen[j]) { seen[j] = 1; q.push(j); }
+      }
+    }
+    const x = x1 * G, y = y1 * G, w = (x2 - x1 + 1) * G, h = (y2 - y1 + 1) * G;
+    if (cnt < 6 || w < 16 || h < 8) continue; // skip rules, dots, noise
+    if (w > pw * 0.9 && h > ph * 0.9) continue; // full-page background
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(w * scale); c.height = Math.ceil(h * scale);
+    c.getContext("2d")!.drawImage(canvas, x * scale, y * scale, w * scale, h * scale, 0, 0, c.width, c.height);
+    out.push({ x, y, w, h, src: c.toDataURL("image/png") });
+  }
+  return out;
+}
+

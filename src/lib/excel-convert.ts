@@ -132,7 +132,7 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
       // column order: Excel column A is on the right for RTL sheets
       const ordered = rtl ? [...cols].reverse() : cols;
       ordered.forEach((c, i) => {
-        const px = ((c[1] - c[0]) / 0.75);
+        const px = ((c[1] - c[0]) / 0.75) + 12; // breathing room so letters are not clipped
         ws!.getColumn(i + 1).width = Math.max(1, (px - 5) / 7);
       });
     }
@@ -142,16 +142,23 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
       if (i < 0) i = x < 0 ? 0 : cols.length - 1;
       return rtl ? cols.length - i : i + 1;
     };
-    let prevBase = 0;
-    const spans: { top: number; base: number }[] = [];
+    // map PDF y → (excel row index, excel y) so pictures land next to their text
+    const marks: { pdfY: number; xlY: number }[] = [{ pdfY: 0, xlY: 0 }];
+    const rowTops: number[] = []; // excel y of each used row top (relative to page start)
+    let xlY = 0, prevBase = 0, extra = 0;
+    const addRow = (h: number) => { rowTops.push(xlY); sheet.getRow(rowOffset + extra + rowTops.length).height = h; xlY += h; };
     rows.forEach((segs, ri) => {
-      const rowNo = rowOffset + ri + 1;
       const base = Math.max(...segs.map((s) => s.base));
       const maxH = Math.max(...segs.map((s) => s.h));
-      const height = ri === 0 ? Math.max(maxH * 1.35, base - (perPageSheets ? 0 : 0)) : base - prevBase;
-      const rh = Math.min(409, Math.max(maxH * 1.25, height));
-      sheet.getRow(rowNo).height = rh;
-      spans.push({ top: base - rh, base });
+      const need = Math.max(15, maxH * 1.6); // readable, never squashed
+      const gap = base - prevBase - need;
+      // spacer row for real vertical white space (keeps layout & room for pictures)
+      if (gap > Math.max(10, maxH * 0.8)) { addRow(Math.min(409, gap)); marks.push({ pdfY: base - maxH * 1.3, xlY }); }
+      void ri;
+      const rh = Math.min(409, need);
+      addRow(rh);
+      marks.push({ pdfY: base, xlY });
+      const rowNo = rowOffset + extra + rowTops.length;
       prevBase = base;
       const used = new Set<number>();
       for (const s of segs) {
@@ -178,7 +185,7 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
         const left = s.x - band[0], right = band[1] - s.r;
         const centered = doMerge || (Math.abs(left - right) < 3 && left > 4 && segs.length > 1);
         const horizontal = centered ? "center" : num ? "right" : s.rtl ? "right" : "left";
-        cell.alignment = { horizontal, vertical: "bottom", readingOrder: s.rtl ? "rtl" : "ltr" };
+        cell.alignment = { horizontal, vertical: "middle", indent: horizontal === "center" ? 0 : 1, readingOrder: s.rtl ? "rtl" : "ltr" };
         used.add(c1);
         // merge cells the text physically covers so wide titles keep their place
         if (doMerge) {
@@ -188,25 +195,36 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
       }
     });
     // pictures: anchor each at its original spot over the grid
-    for (const im of page.images ?? []) {
-      let r = spans.findIndex((sp) => sp.base > im.y);
-      let rowF: number;
-      if (r < 0) {
-        const last = spans[spans.length - 1];
-        rowF = spans.length + (im.y - (last?.base ?? 0)) / 15;
-      } else {
-        const sp = spans[r]!;
-        rowF = r + Math.max(0, (im.y - sp.top) / Math.max(1, sp.base - sp.top));
+    const toXl = (y: number) => {
+      for (let k = 1; k < marks.length; k++) {
+        const a = marks[k - 1]!, b = marks[k]!;
+        if (y <= b.pdfY) return a.xlY + ((y - a.pdfY) / Math.max(0.01, b.pdfY - a.pdfY)) * (b.xlY - a.xlY);
       }
+      const l = marks[marks.length - 1]!;
+      return l.xlY + (y - l.pdfY);
+    };
+    const pageEnd = toXl(page.height);
+    while (xlY < pageEnd - 1) addRow(Math.min(409, Math.max(15, pageEnd - xlY)));
+    const rowAt = (y: number) => {
+      let r = rowTops.length - 1;
+      while (r > 0 && rowTops[r]! > y) r--;
+      const h = (rowTops[r + 1] ?? xlY) - rowTops[r]!;
+      return r + Math.min(0.999, Math.max(0, (y - rowTops[r]!) / Math.max(1, h)));
+    };
+    for (const im of page.images ?? []) {
+      const top = toXl(im.y), bottom = toXl(im.y + im.h);
+      const rowF = extra + rowAt(Math.max(0, top));
+      const hPt = Math.max(4, bottom - top);
+      const wPt = Math.min(im.w * 1.25, im.w * (hPt / Math.max(1, im.h))); // keep aspect ratio
       const edge = rtl ? im.x + im.w : im.x;
       let i = cols.findIndex((c) => edge >= c[0] && edge <= c[1]);
       if (i < 0) i = edge <= 0 ? 0 : cols.length - 1;
       const c = cols[i]!;
       const colF = rtl ? cols.length - 1 - i + (c[1] - edge) / Math.max(1, c[1] - c[0]) : i + (edge - c[0]) / Math.max(1, c[1] - c[0]);
       const id = wb.addImage({ base64: im.src, extension: "png" });
-      sheet.addImage(id, { tl: { col: colF, row: rowOffset + rowF } as never, ext: { width: im.w / 0.75, height: im.h / 0.75 }, editAs: "oneCell" });
+      sheet.addImage(id, { tl: { col: colF, row: rowOffset + rowF } as never, ext: { width: wPt / 0.75, height: hPt / 0.75 }, editAs: "oneCell" });
     }
-    rowOffset += rows.length + 1;
+    rowOffset += rowTops.length + 1;
   });
   if (!wb.worksheets.length) wb.addWorksheet("صفحة 1");
   const buf = await wb.xlsx.writeBuffer();
