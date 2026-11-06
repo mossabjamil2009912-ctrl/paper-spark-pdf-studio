@@ -46,24 +46,6 @@ type Tool = {
 const tools: Tool[] = [
   { icon: EditPdfIcon as unknown as LucideIcon, title: "تحرير PDF", tile: "text-accent !shadow-none", href: "/edit" },
   {
-    icon: ArrowLeftRight,
-    title: "تحويل PDF ⇄ Excel",
-    tile: "tile-green",
-    options: [
-      { label: "من PDF إلى Excel", href: "/pdf-to-excel" },
-      { label: "من Excel إلى PDF", href: "/excel-to-pdf" },
-    ],
-  },
-  {
-    icon: Languages,
-    title: "ترجمة الملفات",
-    tile: "tile-blue",
-    options: [
-      { label: "إلى العربية", href: "/translate?to=ar" },
-      { label: "إلى الإنجليزية", href: "/translate?to=en" },
-    ],
-  },
-  {
     icon: Layers,
     title: "دمج وتقسيم",
     tile: "tile-yellow",
@@ -79,6 +61,24 @@ const tools: Tool[] = [
     options: [
       { label: "ملفات - صور - فيديو", href: "/compress" },
       { label: "استخراج الصوت", href: "/compress?kind=audio" },
+    ],
+  },
+  {
+    icon: Languages,
+    title: "ترجمة الملفات",
+    tile: "tile-blue",
+    options: [
+      { label: "إلى العربية", href: "/translate?to=ar" },
+      { label: "إلى الإنجليزية", href: "/translate?to=en" },
+    ],
+  },
+  {
+    icon: ArrowLeftRight,
+    title: "تحويل PDF ⇄ Excel",
+    tile: "tile-green",
+    options: [
+      { label: "من PDF إلى Excel", href: "/pdf-to-excel" },
+      { label: "من Excel إلى PDF", href: "/excel-to-pdf" },
     ],
   },
   {
