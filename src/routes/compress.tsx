@@ -72,6 +72,7 @@ function Compress() {
       downloadBytes(blob, name);
       setRes({ name, before: f.size, after: blob.size });
       ok = true;
+      return { before: f.size, after: blob.size };
     } catch (e) {
       console.error(e);
       toast.error(kind === "audio" ? "تعذّر استخراج الصوت من هذا الملف" : "تعذّر ضغط الملف");
@@ -79,6 +80,7 @@ function Compress() {
       release(ok ? "اكتمل الملف وتم تنزيله ✅" : "تعذّرت العملية");
       setBusy(null);
     }
+    return null;
   };
 
   const back = () => {
@@ -146,7 +148,13 @@ function Compress() {
                   </div>
                 )}
                 {kind === "video" && <p className="mb-3 text-sm">الدقة المختارة: <b>{vres === "max" ? "أقصى ضغط" : vres === "orig" ? "نفس الدقة" : `${vres}p`}</b></p>}
-                <FileDrop onFiles={(fs) => fs[0] && run(fs[0])} {...drop[kind]} />
+                {(kind === "pdf" || kind === "image") && <p className="mb-2 text-sm text-muted-foreground">تقدر تختار عدة ملفات مرة واحدة.</p>}
+                <FileDrop multiple={kind === "pdf" || kind === "image"} onFiles={async (fs) => {
+                  if (fs.length <= 1) { if (fs[0]) await run(fs[0]); return; }
+                  let before = 0, after = 0;
+                  for (const f of fs) { const r = await run(f); if (r) { before += r.before; after += r.after; } }
+                  setRes({ name: `${fs.length} ملفات`, before, after });
+                }} {...drop[kind]} />
               </>
             )}
           </>

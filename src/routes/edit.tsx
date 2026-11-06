@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer, ImageIcon, Trash2, ImagePlus, Redo2, ZoomIn, ZoomOut } from "lucide-react";
+import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer, ImageIcon, Trash2, ImagePlus, Redo2, ZoomIn, ZoomOut, Square, MoveUpRight } from "lucide-react";
 import { clearDraft, draftKey, loadDraft, saveDraft } from "@/lib/draft-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -24,7 +24,7 @@ export const Route = createFileRoute("/edit")({
   component: EditPage,
 });
 
-type Tool = "none" | "edittext" | "image" | "area" | "text" | "pen" | "highlight" | "sign" | "erase";
+type Tool = "none" | "edittext" | "image" | "area" | "text" | "rect" | "arrow" | "pen" | "highlight" | "sign" | "erase";
 const COLORS = ["#111827", "#1d4ed8", "#c2410c", "#15803d", "#facc15"] as const;
 const tools: { id: Tool; label: string; icon: typeof Pen }[] = [
   { id: "none", label: "تصفح", icon: MousePointer2 },
@@ -33,6 +33,8 @@ const tools: { id: Tool; label: string; icon: typeof Pen }[] = [
   { id: "image", label: "الصور", icon: ImageIcon },
   { id: "text", label: "نص", icon: Type },
   { id: "sign", label: "توقيع", icon: Signature },
+  { id: "rect", label: "مربع", icon: Square },
+  { id: "arrow", label: "سهم", icon: MoveUpRight },
   { id: "pen", label: "قلم", icon: Pen },
   { id: "highlight", label: "تظليل", icon: Highlighter },
   { id: "erase", label: "ممحاة", icon: Eraser },
@@ -52,6 +54,14 @@ function EditPage() {
   const [future, setFuture] = useState<Item[][][]>([]);
   const [zoom, setZoom] = useState(1);
   const keyRef = useRef<string | null>(null);
+
+  // Saved signature/stamp is reused across files.
+  useEffect(() => {
+    try { const s = localStorage.getItem("saved-signature"); if (s) setSig(JSON.parse(s)); } catch { /* ignore */ }
+  }, []);
+  useEffect(() => {
+    try { if (sig) localStorage.setItem("saved-signature", JSON.stringify(sig)); } catch { /* ignore */ }
+  }, [sig]);
 
   useEffect(() => {
     if (!keyRef.current || !pages) return;
@@ -107,7 +117,7 @@ function EditPage() {
     });
 
   const pickTool = (t: Tool) => {
-    if (t === "sign") setPadOpen(true);
+    if (t === "sign" && !sig) setPadOpen(true);
     setTool(t);
   };
 
@@ -216,7 +226,7 @@ function EditPage() {
           <p className="pb-2 text-center text-xs text-muted-foreground">اسحب مربعاً فوق أي كلمة أو جزء من الصفحة لمسحه وكتابة بديل</p>
         )}
         {tool === "sign" && sig && (
-          <p className="pb-2 text-center text-xs text-muted-foreground">انقر على الصفحة لوضع التوقيع · <button className="underline" onClick={() => setPadOpen(true)}>توقيع جديد</button></p>
+          <p className="pb-2 text-center text-xs text-muted-foreground">انقر على الصفحة لوضع توقيعك المحفوظ · <button className="underline" onClick={() => setPadOpen(true)}>توقيع جديد</button></p>
         )}
       </div>
 
@@ -271,6 +281,7 @@ function PageCanvas({
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef<Item | null>(null);
+  const shapeStart = useRef<[number, number] | null>(null);
   const [draft, setDraft] = useState<{ x: number; y: number; text: string; size?: number; color?: string; bg?: string; font?: string; bold?: boolean; italic?: boolean; ltr?: boolean; cover?: { x: number; y: number; w: number; h: number } } | null>(null);
   type Draft = NonNullable<typeof draft>;
   const [edited, setEdited] = useState<Map<number, { draft: Draft; items: Item[] }>>(new Map());
@@ -556,6 +567,10 @@ function PageCanvas({
         : { kind: "path", points: [[x, y]], color: color === COLORS[0] ? COLORS[4] : color, width: 0.02, alpha: 0.35 };
       (e.target as Element).setPointerCapture(e.pointerId);
       redraw();
+    } else if (tool === "rect" || tool === "arrow") {
+      shapeStart.current = [x, y];
+      live.current = { kind: "path", points: [[x, y]], color, width: 0.004, alpha: 1 };
+      (e.target as Element).setPointerCapture(e.pointerId);
     } else if (tool === "erase") {
       const k = hitTest(items, x, y, aspect);
       if (k >= 0) onRemove(k);
@@ -575,13 +590,28 @@ function PageCanvas({
   const onMove = (e: React.PointerEvent) => {
     if (sel) { const [x, y] = pt(e); setSel({ ...sel, x1: x, y1: y }); return; }
     if (live.current?.kind !== "path") return;
+    if (shapeStart.current) {
+      const [ax, ay] = shapeStart.current, [bx, by] = pt(e);
+      if (tool === "rect") {
+        live.current.points = [[ax, ay], [bx, ay], [bx, by], [ax, by], [ax, ay]];
+      } else {
+        const ang = Math.atan2((by - ay) / aspect, bx - ax), L = 0.025;
+        const head = (d: number): [number, number] => [bx - L * Math.cos(ang + d), by - L * aspect * Math.sin(ang + d)];
+        live.current.points = [[ax, ay], [bx, by], head(0.45), [bx, by], head(-0.45)];
+      }
+      redraw();
+      return;
+    }
     live.current.points.push(pt(e));
     redraw();
   };
 
   const onUp = () => {
     if (sel) { const s = sel; setSel(null); void finishArea(s); return; }
+    const wasShape = shapeStart.current;
+    shapeStart.current = null;
     if (live.current) {
+      if (wasShape && live.current.kind === "path" && live.current.points.length < 2) { live.current = null; redraw(); return; }
       onAdd(live.current);
       live.current = null;
     }
@@ -602,7 +632,7 @@ function PageCanvas({
     });
   };
 
-  const drawing = tool === "pen" || tool === "highlight" || tool === "area";
+  const drawing = tool === "pen" || tool === "highlight" || tool === "area" || tool === "rect" || tool === "arrow";
 
   return (
     <div ref={wrap} className="relative bg-paper shadow-paper">
