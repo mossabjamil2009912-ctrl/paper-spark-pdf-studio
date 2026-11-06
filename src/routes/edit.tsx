@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer, ImageIcon, Trash2, ImagePlus } from "lucide-react";
+import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer, ImageIcon, Trash2, ImagePlus, Redo2, ZoomIn, ZoomOut } from "lucide-react";
+import { clearDraft, draftKey, loadDraft, saveDraft } from "@/lib/draft-store";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,15 @@ function EditPage() {
   const [sig, setSig] = useState<{ src: string; aspect: number } | null>(null);
   const [padOpen, setPadOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [future, setFuture] = useState<Item[][][]>([]);
+  const [zoom, setZoom] = useState(1);
+  const keyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!keyRef.current || !pages) return;
+    const t = setTimeout(() => saveDraft(keyRef.current!, items), 600);
+    return () => clearTimeout(t);
+  }, [items, pages]);
 
   const load = async (f: File) => {
     const bytes = await f.arrayBuffer();
@@ -56,8 +66,14 @@ function EditPage() {
     try {
       const r = await renderPages(bytes, 2);
       setPages(r);
-      setItems(r.map(() => []));
-      setHistory([]);
+      const key = draftKey(f.name, f.size);
+      keyRef.current = key;
+      const saved = await loadDraft<Item[][]>(key);
+      setHistory([]); setFuture([]); setZoom(1);
+      if (saved && saved.length === r.length && saved.some((l) => l.length)) {
+        setItems(saved);
+        toast.success("استرجعنا تعديلاتك السابقة على هذا الملف", { action: { label: "ابدأ من جديد", onClick: () => { setItems(r.map(() => [])); clearDraft(key); } } });
+      } else setItems(r.map(() => []));
       setTool("edittext");
     } catch (e) {
       console.error(e);
@@ -69,6 +85,7 @@ function EditPage() {
   const commit = useCallback((page: number, fn: (list: Item[]) => Item[]) => {
     setItems((cur) => {
       setHistory((h) => [...h.slice(-50), cur]);
+      setFuture([]);
       return cur.map((l, i) => (i === page ? fn(l) : l));
     });
   }, []);
@@ -76,8 +93,17 @@ function EditPage() {
   const undo = () =>
     setHistory((h) => {
       if (!h.length) return h;
-      setItems(h[h.length - 1]!);
+      const prev = h[h.length - 1]!;
+      setItems((cur) => { setFuture((f) => [...f, cur]); return prev; });
       return h.slice(0, -1);
+    });
+
+  const redo = () =>
+    setFuture((f) => {
+      if (!f.length) return f;
+      const next = f[f.length - 1]!;
+      setItems((cur) => { setHistory((h) => [...h, cur]); return next; });
+      return f.slice(0, -1);
     });
 
   const pickTool = (t: Tool) => {
@@ -174,6 +200,9 @@ function EditPage() {
           )}
           <div className="ms-auto flex gap-2">
             <Button variant="ghost" size="sm" onClick={undo} disabled={!history.length}><Undo2 /> تراجع</Button>
+            <Button variant="ghost" size="sm" onClick={redo} disabled={!future.length}><Redo2 /> إعادة</Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="تصغير الصفحة" onClick={() => setZoom((z) => Math.max(1, +(z - 0.25).toFixed(2)))} disabled={zoom <= 1}><ZoomOut /></Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="تكبير الصفحة" onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))} disabled={zoom >= 3}><ZoomIn /></Button>
             <Button size="sm" onClick={save} disabled={saving || !pages}><Download /> {saving ? "جارٍ الحفظ…" : "حفظ"}</Button>
           </div>
         </div>
@@ -194,8 +223,8 @@ function EditPage() {
       {!pages ? (
         <Busy />
       ) : (
-        <div className="bg-stage py-6">
-          <div className="mx-auto flex max-w-4xl flex-col gap-6 px-3">
+        <div className="overflow-x-auto bg-stage py-6">
+          <div className="mx-auto flex max-w-4xl flex-col gap-6 px-3" style={zoom > 1 ? { width: `${zoom * 100}%`, maxWidth: `${zoom * 56}rem` } : undefined}>
             {pages.map((p, i) => (
               <PageCanvas
                 key={i}
