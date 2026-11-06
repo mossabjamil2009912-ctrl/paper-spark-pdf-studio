@@ -95,3 +95,82 @@ export async function compressVideo(file: File, onProgress: (p: number) => void)
   if (blob.size >= file.size) return { blob: file, ext: file.name.split(".").pop() || "mp4" };
   return { blob, ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
 }
+
+export type VideoTarget = 270 | 360 | 720 | 1080;
+
+/** Video: re-encode at a chosen height (keeps aspect ratio; never upscales). Runs in real time. */
+export async function convertVideo(
+  file: File,
+  height: VideoTarget,
+  onProgress: (p: number) => void,
+): Promise<{ blob: Blob; ext: string }> {
+  const url = URL.createObjectURL(file);
+  const v = document.createElement("video");
+  v.src = url;
+  v.playsInline = true;
+  await new Promise<void>((ok, err) => {
+    v.onloadedmetadata = () => ok();
+    v.onerror = () => err(new Error("video"));
+  });
+  const scale = Math.min(1, height / v.videoHeight);
+  const w = Math.round((v.videoWidth * scale) / 2) * 2;
+  const h = Math.round((v.videoHeight * scale) / 2) * 2;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d")!;
+  const bps = { 270: 400_000, 360: 700_000, 720: 2_000_000, 1080: 4_000_000 }[height];
+  const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find(
+    (m) => MediaRecorder.isTypeSupported(m),
+  );
+  if (!mime) throw new Error("unsupported");
+  const out = c.captureStream(30);
+  const src = (v as HTMLVideoElement & { captureStream(): MediaStream }).captureStream();
+  src.getAudioTracks().forEach((t) => out.addTrack(t));
+  const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: bps, audioBitsPerSecond: 128_000 });
+  const chunks: Blob[] = [];
+  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  const done = new Promise<void>((r) => (rec.onstop = () => r()));
+  let raf = 0;
+  const draw = () => {
+    g.drawImage(v, 0, 0, w, h);
+    raf = requestAnimationFrame(draw);
+  };
+  v.ontimeupdate = () => onProgress(Math.min(1, v.currentTime / v.duration));
+  v.onended = () => rec.state !== "inactive" && rec.stop();
+  await v.play();
+  draw();
+  rec.start(1000);
+  await done;
+  cancelAnimationFrame(raf);
+  URL.revokeObjectURL(url);
+  return { blob: new Blob(chunks, { type: mime.split(";")[0] }), ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
+}
+
+/** Extract the audio track as MP3 (fast, not real time). */
+export async function videoToMp3(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
+  const ac = new AudioContext();
+  const audio = await ac.decodeAudioData(await file.arrayBuffer());
+  ac.close();
+  const { Mp3Encoder } = await import("@breezystack/lamejs");
+  const ch = Math.min(2, audio.numberOfChannels);
+  const enc = new Mp3Encoder(ch, audio.sampleRate, 192);
+  const toI16 = (f: Float32Array) => {
+    const o = new Int16Array(f.length);
+    for (let i = 0; i < f.length; i++) o[i] = Math.max(-1, Math.min(1, f[i])) * 0x7fff;
+    return o;
+  };
+  const L = toI16(audio.getChannelData(0));
+  const R = ch > 1 ? toI16(audio.getChannelData(1)) : undefined;
+  const parts: BlobPart[] = [];
+  const step = 1152 * 100;
+  for (let i = 0; i < L.length; i += step) {
+    const buf = R ? enc.encodeBuffer(L.subarray(i, i + step), R.subarray(i, i + step)) : enc.encodeBuffer(L.subarray(i, i + step));
+    if (buf.length) parts.push(new Uint8Array(buf));
+    onProgress(i / L.length);
+    if ((i / step) % 20 === 0) await new Promise((r) => setTimeout(r));
+  }
+  const end = enc.flush();
+  if (end.length) parts.push(new Uint8Array(end));
+  return { blob: new Blob(parts, { type: "audio/mpeg" }), ext: "mp3" };
+}
