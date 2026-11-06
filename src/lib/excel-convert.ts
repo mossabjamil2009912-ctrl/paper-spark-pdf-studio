@@ -143,12 +143,15 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
       return rtl ? cols.length - i : i + 1;
     };
     let prevBase = 0;
+    const spans: { top: number; base: number }[] = [];
     rows.forEach((segs, ri) => {
       const rowNo = rowOffset + ri + 1;
       const base = Math.max(...segs.map((s) => s.base));
       const maxH = Math.max(...segs.map((s) => s.h));
       const height = ri === 0 ? Math.max(maxH * 1.35, base - (perPageSheets ? 0 : 0)) : base - prevBase;
-      sheet.getRow(rowNo).height = Math.min(409, Math.max(maxH * 1.25, height));
+      const rh = Math.min(409, Math.max(maxH * 1.25, height));
+      sheet.getRow(rowNo).height = rh;
+      spans.push({ top: base - rh, base });
       prevBase = base;
       const used = new Set<number>();
       for (const s of segs) {
@@ -184,6 +187,25 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
         }
       }
     });
+    // pictures: anchor each at its original spot over the grid
+    for (const im of page.images ?? []) {
+      let r = spans.findIndex((sp) => sp.base > im.y);
+      let rowF: number;
+      if (r < 0) {
+        const last = spans[spans.length - 1];
+        rowF = spans.length + (im.y - (last?.base ?? 0)) / 15;
+      } else {
+        const sp = spans[r]!;
+        rowF = r + Math.max(0, (im.y - sp.top) / Math.max(1, sp.base - sp.top));
+      }
+      const edge = rtl ? im.x + im.w : im.x;
+      let i = cols.findIndex((c) => edge >= c[0] && edge <= c[1]);
+      if (i < 0) i = edge <= 0 ? 0 : cols.length - 1;
+      const c = cols[i]!;
+      const colF = rtl ? cols.length - 1 - i + (c[1] - edge) / Math.max(1, c[1] - c[0]) : i + (edge - c[0]) / Math.max(1, c[1] - c[0]);
+      const id = wb.addImage({ base64: im.src, extension: "png" });
+      sheet.addImage(id, { tl: { col: colF, row: rowOffset + rowF } as never, ext: { width: im.w / 0.75, height: im.h / 0.75 }, editAs: "oneCell" });
+    }
     rowOffset += rows.length + 1;
   });
   if (!wb.worksheets.length) wb.addWorksheet("صفحة 1");

@@ -29,7 +29,8 @@ export function cssFontFor(name: string, generic: string, rtl: boolean): string 
 }
 /** Raw text fragment in PDF points (top-left origin) with sampled colours. */
 export type Frag = { str: string; x: number; y: number; w: number; h: number; fontName: string; generic: string; fg: string; bg: string };
-export type RenderedPage = { src: string; width: number; height: number; texts: PageText[]; frags: Frag[] };
+export type PdfImage = { x: number; y: number; w: number; h: number; src: string };
+export type RenderedPage = { src: string; width: number; height: number; texts: PageText[]; frags: Frag[]; images?: PdfImage[] };
 
 /** Render each page to a JPEG data URL. width/height are the displayed size in PDF points. */
 export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<RenderedPage[]> {
@@ -79,7 +80,31 @@ export async function renderPages(bytes: ArrayBuffer, scale = 2): Promise<Render
     });
     const frags: Frag[] = raw.map((b) => ({ str: b.str, x: b.x, y: b.y, w: b.w, h: b.h, fontName: b.fontName ?? "", generic: b.generic ?? "sans-serif",
       ...sampleColors(ctx, b.x * scale, b.y * scale, b.w * scale, b.h * 1.15 * scale) }));
-    out.push({ texts, frags, src: canvas.toDataURL("image/jpeg", 0.85), width: base.width, height: base.height });
+    const images: PdfImage[] = [];
+    try {
+      const ops = await page.getOperatorList();
+      const O = pdfjs.OPS;
+      const stack: number[][] = [];
+      let ctm = base.transform.slice() as number[];
+      for (let k = 0; k < ops.fnArray.length; k++) {
+        const fn = ops.fnArray[k];
+        if (fn === O.save) stack.push(ctm.slice());
+        else if (fn === O.restore) ctm = stack.pop() ?? ctm;
+        else if (fn === O.transform) ctm = pdfjs.Util.transform(ctm, ops.argsArray[k] as number[]);
+        else if (fn === O.paintImageXObject || fn === O.paintInlineImageXObject || fn === O.paintImageXObjectRepeat) {
+          const pts = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => [ctm[0]! * a! + ctm[2]! * b! + ctm[4]!, ctm[1]! * a! + ctm[3]! * b! + ctm[5]!]);
+          const xs = pts.map((q) => q[0]!), ys = pts.map((q) => q[1]!);
+          const x = Math.max(0, Math.min(...xs)), y = Math.max(0, Math.min(...ys));
+          const w = Math.min(base.width, Math.max(...xs)) - x, h = Math.min(base.height, Math.max(...ys)) - y;
+          if (w < 4 || h < 4) continue;
+          const c = document.createElement("canvas");
+          c.width = Math.ceil(w * scale); c.height = Math.ceil(h * scale);
+          c.getContext("2d")!.drawImage(canvas, x * scale, y * scale, w * scale, h * scale, 0, 0, c.width, c.height);
+          images.push({ x, y, w, h, src: c.toDataURL("image/png") });
+        }
+      }
+    } catch (e) { console.warn(e); }
+    out.push({ images, texts, frags, src: canvas.toDataURL("image/jpeg", 0.85), width: base.width, height: base.height });
     page.cleanup();
   }
   await loadingTask.destroy();
