@@ -77,33 +77,33 @@ const tools: Tool[] = [
 function Index() {
   return (
     <Shell>
-      <section className="mx-auto max-w-3xl px-4 pt-8 pb-5 text-center">
-        <h1 className="text-3xl font-bold text-primary md:text-4xl">اختر الخدمة</h1>
+      <section className="mx-auto max-w-3xl px-4 pt-5 pb-3 text-center">
+        <h1 className="text-2xl font-bold text-primary md:text-3xl">اختر الخدمة</h1>
       </section>
-      <section className="mx-auto grid max-w-3xl gap-3 px-4 pb-16 sm:grid-cols-2">
+      <section className="mx-auto grid max-w-3xl gap-2 px-4 pb-10 sm:grid-cols-2">
         {tools.map((t) => {
           const Icon = t.icon;
           const head = (
-            <div className="flex items-center gap-4">
-              <span className={`${t.tile} relative grid h-14 w-14 shrink-0 place-items-center rounded-2xl shadow-paper transition-transform group-hover:-rotate-6 group-hover:scale-105`}>
-                <Icon className="h-7 w-7" strokeWidth={2.2} />
-                <span className="absolute -top-1 -left-1 h-3 w-3 rounded-full bg-card/70" />
+            <div className="flex items-center gap-3">
+              <span className={`${t.tile} relative grid h-9 w-9 shrink-0 place-items-center rounded-xl shadow-paper transition-transform group-hover:-rotate-6 group-hover:scale-105`}>
+                <Icon className="h-5 w-5" strokeWidth={2.2} />
+                <span className="absolute -top-0.5 -left-0.5 h-2 w-2 rounded-full bg-card/70" />
               </span>
-              <span className="text-lg font-bold text-foreground">{t.title}</span>
+              <span className="text-base font-bold text-foreground">{t.title}</span>
             </div>
           );
           if (t.href)
             return (
-              <a key={t.title} href={t.href} className="group rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-paper">
+              <a key={t.title} href={t.href} className="group rounded-xl border bg-card p-3 transition-all hover:-translate-y-0.5 hover:shadow-paper">
                 {head}
               </a>
             );
           return (
-            <div key={t.title} className="group rounded-2xl border bg-card p-4">
+            <div key={t.title} className="group rounded-xl border bg-card p-3">
               {head}
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 {t.options!.map((o) => (
-                  <a key={o.href} href={o.href} dir="auto" className="rounded-xl border bg-secondary px-3 py-2.5 text-center text-sm font-bold text-foreground transition-colors hover:border-accent hover:text-accent">
+                  <a key={o.href} href={o.href} dir="auto" className="rounded-xl border bg-secondary px-2 py-1.5 text-center text-xs font-bold text-foreground transition-colors hover:border-accent hover:text-accent">
                     {o.label}
                   </a>
                 ))}
