@@ -77,11 +77,8 @@ function TranslatePage() {
     <Shell>
       <PageTitle title={fixed ? (target === "ar" ? "ترجمة إلى العربية" : "ترجمة إلى الإنجليزية") : "ترجمة الملفات"} sub="خدمة الترجمة الذكية" />
       {target === "ar" && (
-        <p className="mx-auto mb-2 max-w-6xl px-4 text-sm text-muted-foreground">تبقى المصطلحات التقنية والاختصارات والرموز والأرقام بالإنجليزية كما هي.</p>
+        <p className="mx-auto mb-2 max-w-6xl px-4 text-sm text-muted-foreground">المصطلحات والرموز تبقى بالإنجليزية</p>
       )}
-      <p className="mx-auto mb-4 max-w-6xl px-4 text-sm text-muted-foreground">
-        
-      </p>
       {busy ? (
         <Busy text={busy} />
       ) : (
