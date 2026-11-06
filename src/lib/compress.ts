@@ -63,88 +63,118 @@ export async function compressImage(file: File): Promise<{ blob: Blob; ext: stri
   return best;
 }
 
-/** Video: re-record at the original resolution with a lower bitrate (runs in real time). */
-export async function compressVideo(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
-  const url = URL.createObjectURL(file);
-  const v = document.createElement("video");
-  v.src = url;
-  v.playsInline = true;
-  await new Promise<void>((ok, err) => {
-    v.onloadedmetadata = () => ok();
-    v.onerror = () => err(new Error("video"));
-  });
-  const w = v.videoWidth, h = v.videoHeight;
-  const origBps = (file.size * 8) / Math.max(1, v.duration);
-  const target = Math.max(400_000, Math.min(origBps * 0.5, w * h * 3));
-  const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find(
-    (m) => MediaRecorder.isTypeSupported(m),
-  );
-  if (!mime) throw new Error("unsupported");
-  const stream = (v as HTMLVideoElement & { captureStream(): MediaStream }).captureStream();
-  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: target, audioBitsPerSecond: 96_000 });
-  const chunks: Blob[] = [];
-  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  const done = new Promise<void>((r) => (rec.onstop = () => r()));
-  v.ontimeupdate = () => onProgress(Math.min(1, v.currentTime / v.duration));
-  v.onended = () => rec.state !== "inactive" && rec.stop();
-  rec.start(1000);
-  await v.play();
-  await done;
-  URL.revokeObjectURL(url);
-  const blob = new Blob(chunks, { type: mime.split(";")[0] ?? "video/webm" });
-  if (blob.size >= file.size) return { blob: file, ext: file.name.split(".").pop() || "mp4" };
-  return { blob, ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
-}
-
 export type VideoTarget = 270 | 360 | 720 | 1080;
 
-/** Video: re-encode at a chosen height (keeps aspect ratio; never upscales). Runs in real time. */
-export async function convertVideo(
+/**
+ * Re-encode a video by playing it (in real time) into a canvas + WebAudio graph and recording that.
+ * WebM output gets its duration patched in — MediaRecorder leaves it empty, which players show as 0:00.
+ */
+async function recordVideo(
   file: File,
-  height: VideoTarget,
+  height: number | null,
+  bitrate: (w: number, h: number, srcBps: number) => number,
   onProgress: (p: number) => void,
 ): Promise<{ blob: Blob; ext: string }> {
   const url = URL.createObjectURL(file);
   const v = document.createElement("video");
   v.src = url;
   v.playsInline = true;
-  await new Promise<void>((ok, err) => {
-    v.onloadedmetadata = () => ok();
-    v.onerror = () => err(new Error("video"));
-  });
-  const scale = Math.min(1, height / v.videoHeight);
-  const w = Math.round((v.videoWidth * scale) / 2) * 2;
-  const h = Math.round((v.videoHeight * scale) / 2) * 2;
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const g = c.getContext("2d")!;
-  const bps = { 270: 400_000, 360: 700_000, 720: 2_000_000, 1080: 4_000_000 }[height];
-  const mime = ["video/mp4;codecs=avc1", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find(
-    (m) => MediaRecorder.isTypeSupported(m),
-  );
-  if (!mime) throw new Error("unsupported");
-  const out = c.captureStream(30);
-  const src = (v as HTMLVideoElement & { captureStream(): MediaStream }).captureStream();
-  src.getAudioTracks().forEach((t) => out.addTrack(t));
-  const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: bps, audioBitsPerSecond: 128_000 });
-  const chunks: Blob[] = [];
-  rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-  const done = new Promise<void>((r) => (rec.onstop = () => r()));
-  let raf = 0;
-  const draw = () => {
+  v.preload = "auto";
+  v.style.cssText = "position:fixed;left:-9999px;top:0;width:2px;height:2px;opacity:0";
+  document.body.appendChild(v);
+  let ac: AudioContext | null = null;
+  try {
+    await new Promise<void>((ok, err) => {
+      v.onloadeddata = () => ok();
+      v.onerror = () => err(new Error("video"));
+    });
+    let dur = v.duration;
+    if (!isFinite(dur) || dur <= 0) {
+      v.currentTime = 1e9;
+      await new Promise((r) => (v.onseeked = r));
+      dur = v.duration;
+      v.currentTime = 0;
+      await new Promise((r) => (v.onseeked = r));
+    }
+    const scale = height ? Math.min(1, height / v.videoHeight) : 1;
+    const w = Math.max(2, Math.round((v.videoWidth * scale) / 2) * 2);
+    const h = Math.max(2, Math.round((v.videoHeight * scale) / 2) * 2);
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const g = c.getContext("2d")!;
     g.drawImage(v, 0, 0, w, h);
-    raf = requestAnimationFrame(draw);
-  };
-  v.ontimeupdate = () => onProgress(Math.min(1, v.currentTime / v.duration));
-  v.onended = () => rec.state !== "inactive" && rec.stop();
-  await v.play();
-  draw();
-  rec.start(1000);
-  await done;
-  cancelAnimationFrame(raf);
-  URL.revokeObjectURL(url);
-  return { blob: new Blob(chunks, { type: mime.split(";")[0] ?? "video/webm" }), ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
+    const out = c.captureStream(30);
+    // Audio via WebAudio: captured but not played through the speakers.
+    try {
+      ac = new AudioContext();
+      await ac.resume();
+      const dest = ac.createMediaStreamDestination();
+      ac.createMediaElementSource(v).connect(dest);
+      dest.stream.getAudioTracks().forEach((t) => out.addTrack(t));
+    } catch {
+      v.muted = true;
+    }
+    const mime = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+      "video/mp4;codecs=avc1,mp4a.40.2",
+      "video/mp4",
+    ].find((m) => MediaRecorder.isTypeSupported(m));
+    if (!mime) throw new Error("unsupported");
+    const srcBps = (file.size * 8) / Math.max(1, dur);
+    const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: Math.round(bitrate(w, h, srcBps)), audioBitsPerSecond: 128_000 });
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    const done = new Promise<void>((r) => (rec.onstop = () => r()));
+    let stopped = false;
+    const stop = () => { if (!stopped) { stopped = true; if (rec.state !== "inactive") rec.stop(); } };
+    let raf = 0;
+    const draw = () => {
+      if (v.readyState >= 2) g.drawImage(v, 0, 0, w, h);
+      onProgress(Math.min(1, v.currentTime / dur));
+      if (v.ended) return stop();
+      raf = requestAnimationFrame(draw);
+    };
+    // Fallback ticker if rAF is throttled (tab in background).
+    const tick = setInterval(() => { if (v.readyState >= 2) g.drawImage(v, 0, 0, w, h); if (v.ended) stop(); }, 100);
+    v.onended = stop;
+    rec.start(1000);
+    const t0 = performance.now();
+    await v.play();
+    draw();
+    await done;
+    cancelAnimationFrame(raf);
+    clearInterval(tick);
+    const elapsed = performance.now() - t0;
+    const type = mime.split(";")[0] ?? "video/webm";
+    let blob = new Blob(chunks, { type });
+    if (!blob.size) throw new Error("empty");
+    if (type === "video/webm") {
+      const { default: fix } = await import("fix-webm-duration");
+      blob = await fix(blob, Math.round(isFinite(dur) && dur > 0 ? dur * 1000 : elapsed), { logger: false });
+    }
+    return { blob, ext: type === "video/mp4" ? "mp4" : "webm" };
+  } finally {
+    v.pause();
+    v.remove();
+    URL.revokeObjectURL(url);
+    ac?.close().catch(() => {});
+  }
+}
+
+/** Video: same resolution, lower bitrate. */
+export async function compressVideo(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
+  const r = await recordVideo(file, null, (w, h, src) => Math.max(400_000, Math.min(src * 0.5, w * h * 3)), onProgress);
+  if (r.blob.size >= file.size) return { blob: file, ext: file.name.split(".").pop() || "mp4" };
+  return r;
+}
+
+/** Video: re-encode at a chosen height (keeps aspect ratio; never upscales). */
+export async function convertVideo(file: File, height: VideoTarget, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
+  const bps = { 270: 400_000, 360: 700_000, 720: 2_000_000, 1080: 4_000_000 }[height];
+  return recordVideo(file, height, () => bps, onProgress);
 }
 
 /** Extract the audio track as MP3 (fast, not real time). */
