@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Languages, Combine, FileSpreadsheet, Sheet, PenTool, Scissors } from "lucide-react";
+import { Languages, Combine, FileSpreadsheet, Sheet, PenTool, Scissors, Minimize2 } from "lucide-react";
 import { Shell } from "@/components/pdf/Shell";
 
 export const Route = createFileRoute("/")({
@@ -24,6 +24,7 @@ const tools = [
   { to: "/excel-to-pdf", icon: Sheet, title: "تحويل Excel إلى PDF" },
   { to: "/translate", href: "/translate?to=ar", icon: Languages, title: "ترجمة إلى العربية" },
   { to: "/translate", href: "/translate?to=en", icon: Languages, title: "ترجمة إلى الإنجليزية" },
+  { to: "/compress", icon: Minimize2, title: "ضغط PDF والصور والفيديو" },
 ] as const;
 
 function Index() {

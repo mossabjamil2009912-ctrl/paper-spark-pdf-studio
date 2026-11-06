@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CompressRouteImport } from './routes/compress'
 import { Route as EditRouteImport } from './routes/edit'
 import { Route as ExcelToPdfRouteImport } from './routes/excel-to-pdf'
 import { Route as MergeRouteImport } from './routes/merge'
@@ -21,6 +22,11 @@ import { Route as TranslateRouteImport } from './routes/translate'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompressRoute = CompressRouteImport.update({
+  id: '/compress',
+  path: '/compress',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EditRoute = EditRouteImport.update({
@@ -61,6 +67,7 @@ const TranslateRoute = TranslateRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/compress': typeof CompressRoute
   '/edit': typeof EditRoute
   '/excel-to-pdf': typeof ExcelToPdfRoute
   '/merge': typeof MergeRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/compress': typeof CompressRoute
   '/edit': typeof EditRoute
   '/excel-to-pdf': typeof ExcelToPdfRoute
   '/merge': typeof MergeRoute
@@ -82,6 +90,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/compress': typeof CompressRoute
   '/edit': typeof EditRoute
   '/excel-to-pdf': typeof ExcelToPdfRoute
   '/merge': typeof MergeRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/compress'
     | '/edit'
     | '/excel-to-pdf'
     | '/merge'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/compress'
     | '/edit'
     | '/excel-to-pdf'
     | '/merge'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/compress'
     | '/edit'
     | '/excel-to-pdf'
     | '/merge'
@@ -125,6 +137,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CompressRoute: typeof CompressRoute
   EditRoute: typeof EditRoute
   ExcelToPdfRoute: typeof ExcelToPdfRoute
   MergeRoute: typeof MergeRoute
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/compress': {
+      id: '/compress'
+      path: '/compress'
+      fullPath: '/compress'
+      preLoaderRoute: typeof CompressRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/edit': {
@@ -197,6 +217,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CompressRoute: CompressRoute,
   EditRoute: EditRoute,
   ExcelToPdfRoute: ExcelToPdfRoute,
   MergeRoute: MergeRoute,
