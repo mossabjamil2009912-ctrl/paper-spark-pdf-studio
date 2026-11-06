@@ -192,6 +192,8 @@ async function fastVideo(
       audio: { bitrate: 128_000 },
     });
     if (!conv.isValid) return null;
+    // Never silently lose the sound: if audio can't be encoded here, use the slower path.
+    if (conv.discardedTracks.some((d) => d.track.type === "audio")) return null;
     conv.onProgress = (p) => onProgress(p);
     await conv.execute();
     const buf = output.target.buffer;
