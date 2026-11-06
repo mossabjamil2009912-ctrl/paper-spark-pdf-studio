@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { FileUp } from "lucide-react";
-import logo from "@/assets/actes-logo.png.asset.json";
+import logo from "@/assets/actes-logo-v2.png.asset.json";
 import { useRef, useState, type ReactNode } from "react";
 
 const nav = [
