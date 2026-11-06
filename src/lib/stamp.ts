@@ -39,7 +39,7 @@ export async function stampPdf(bytes: ArrayBuffer, o: StampOptions): Promise<Uin
   const wm = o.watermark.trim() ? textPng(o.watermark.trim(), 160, "#c8102e") : null;
   const wmImg = wm ? await doc.embedPng(await wm.bytes) : null;
   for (let i = 0; i < pages.length; i++) {
-    const p = pages[i];
+    const p = pages[i]!;
     const { width, height } = p.getSize();
     if (wmImg && wm) {
       const target = Math.hypot(width, height) * 0.6;

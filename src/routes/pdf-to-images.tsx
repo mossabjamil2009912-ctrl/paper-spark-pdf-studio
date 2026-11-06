@@ -41,12 +41,12 @@ function ImagesPage() {
     }
   };
 
-  const one = async (i: number) => downloadBytes(await toBlob(pages![i].src), `${baseName(name)}-${i + 1}.jpg`);
+  const one = async (i: number) => downloadBytes(await toBlob(pages![i]!.src), `${baseName(name)}-${i + 1}.jpg`);
 
   const all = async () => {
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
-    for (let i = 0; i < pages!.length; i++) zip.file(`${baseName(name)}-${i + 1}.jpg`, await toBlob(pages![i].src));
+    for (let i = 0; i < pages!.length; i++) zip.file(`${baseName(name)}-${i + 1}.jpg`, await toBlob(pages![i]!.src));
     downloadBytes(await zip.generateAsync({ type: "blob" }), `${baseName(name)}-صور.zip`);
   };
 

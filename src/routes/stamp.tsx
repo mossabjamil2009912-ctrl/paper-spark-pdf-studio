@@ -31,7 +31,7 @@ function StampPage() {
 
   const run = async () => {
     if (!file) return;
-    if (!numbers && !mark.trim()) return toast.error("اختر الترقيم أو اكتب علامة مائية");
+    if (!numbers && !mark.trim()) { toast.error("اختر الترقيم أو اكتب علامة مائية"); return; }
     setBusy(true);
     try {
       const out = await stampPdf(await file.arrayBuffer(), { numbers, numberFormat: fmt, watermark: mark, opacity: 0.18 });
