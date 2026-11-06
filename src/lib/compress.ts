@@ -154,7 +154,7 @@ export async function videoToMp3(file: File, onProgress: (p: number) => void): P
   ac.close();
   const { Mp3Encoder } = await import("@breezystack/lamejs");
   const ch = Math.min(2, audio.numberOfChannels);
-  const enc = new Mp3Encoder(ch, audio.sampleRate, 192);
+  const enc = new Mp3Encoder(ch, audio.sampleRate, 128);
   const toI16 = (f: Float32Array) => {
     const o = new Int16Array(f.length);
     for (let i = 0; i < f.length; i++) o[i] = Math.max(-1, Math.min(1, f[i] ?? 0)) * 0x7fff;
@@ -163,12 +163,12 @@ export async function videoToMp3(file: File, onProgress: (p: number) => void): P
   const L = toI16(audio.getChannelData(0));
   const R = ch > 1 ? toI16(audio.getChannelData(1)) : undefined;
   const parts: BlobPart[] = [];
-  const step = 1152 * 100;
+  const step = 1152 * 400;
   for (let i = 0; i < L.length; i += step) {
     const buf = R ? enc.encodeBuffer(L.subarray(i, i + step), R.subarray(i, i + step)) : enc.encodeBuffer(L.subarray(i, i + step));
     if (buf.length) parts.push(new Uint8Array(buf));
     onProgress(i / L.length);
-    if ((i / step) % 20 === 0) await new Promise((r) => setTimeout(r));
+    if ((i / step) % 5 === 0) await new Promise((r) => setTimeout(r));
   }
   const end = enc.flush();
   if (end.length) parts.push(new Uint8Array(end));

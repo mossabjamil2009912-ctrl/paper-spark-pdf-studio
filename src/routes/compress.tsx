@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { FileDown } from "lucide-react";
+import { ArrowRight, FileDown, FileText, Image as ImageIcon, Music, Video } from "lucide-react";
 import { Busy, FileDrop, PageTitle, Shell } from "@/components/pdf/Shell";
 import { downloadBytes } from "@/lib/pdf-ops";
 
@@ -21,94 +21,132 @@ export const Route = createFileRoute("/compress")({
 
 const fmt = (n: number) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
 
+type Kind = "pdf" | "image" | "video" | "audio";
+type Res = "orig" | 270 | 360 | 720 | 1080;
+
+const KINDS: { k: Kind; label: string; sub: string; Icon: typeof FileText }[] = [
+  { k: "pdf", label: "ملف PDF", sub: "تصغير حجم الملف", Icon: FileText },
+  { k: "image", label: "صورة", sub: "نفس الأبعاد بحجم أقل", Icon: ImageIcon },
+  { k: "video", label: "فيديو", sub: "اختر الدقة ثم الفيديو", Icon: Video },
+  { k: "audio", label: "استخراج الصوت", sub: "MP3 سريع", Icon: Music },
+];
+
 function Compress() {
+  const [kind, setKind] = useState<Kind | null>(null);
+  const [vres, setVres] = useState<Res | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [res, setRes] = useState<{ name: string; before: number; after: number } | null>(null);
 
-  const [fmtOut, setFmtOut] = useState<"orig" | 270 | 360 | 720 | 1080 | "mp3">("orig");
   const run = async (f: File) => {
     setRes(null);
     try {
       const lib = await import("@/lib/compress");
       const base = f.name.replace(/\.[^.]+$/, "");
       let blob: Blob, name: string;
-      if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
+      if (kind === "pdf") {
         setBusy("جارٍ ضغط ملف PDF…");
         const out = await lib.compressPdf(await f.arrayBuffer());
         blob = out.length < f.size ? new Blob([out as BlobPart], { type: "application/pdf" }) : f;
         name = base + "-مضغوط.pdf";
-      } else if (f.type.startsWith("image/")) {
+      } else if (kind === "image") {
         setBusy("جارٍ ضغط الصورة…");
         const r = await lib.compressImage(f);
         blob = r.blob;
         name = base + "-مضغوط." + r.ext;
-      } else if (f.type.startsWith("video/") || f.type.startsWith("audio/")) {
-        const prog = (p: number) => setBusy(`جارٍ ${fmtOut === "mp3" ? "استخراج الصوت" : "تحويل الفيديو"}… ${Math.round(p * 100)}%`);
+      } else if (kind === "audio") {
+        const prog = (p: number) => setBusy(`جارٍ استخراج الصوت… ${Math.round(p * 100)}%`);
         prog(0);
-        const r =
-          fmtOut === "mp3"
-            ? await lib.videoToMp3(f, prog)
-            : fmtOut === "orig"
-              ? await lib.compressVideo(f, prog)
-              : await lib.convertVideo(f, fmtOut, prog);
+        const r = await lib.videoToMp3(f, prog);
         blob = r.blob;
-        name = base + "-مضغوط." + r.ext;
+        name = base + ".mp3";
       } else {
-        toast.error("نوع الملف غير مدعوم");
-        return;
+        const prog = (p: number) => setBusy(`جارٍ ضغط الفيديو… ${Math.round(p * 100)}%`);
+        prog(0);
+        const r = vres === "orig" || !vres ? await lib.compressVideo(f, prog) : await lib.convertVideo(f, vres, prog);
+        blob = r.blob;
+        name = base + (vres && vres !== "orig" ? `-${vres}p.` : "-مضغوط.") + r.ext;
       }
       downloadBytes(blob, name);
       setRes({ name, before: f.size, after: blob.size });
     } catch (e) {
       console.error(e);
-      toast.error("تعذّر ضغط الملف");
+      toast.error(kind === "audio" ? "تعذّر استخراج الصوت من هذا الملف" : "تعذّر ضغط الملف");
     } finally {
       setBusy(null);
     }
   };
 
+  const back = () => {
+    setRes(null);
+    if (kind === "video" && vres) setVres(null);
+    else setKind(null);
+  };
+
+  const drop = {
+    pdf: { label: "اختر ملف PDF", accept: "application/pdf,.pdf", exts: [".pdf"] },
+    image: { label: "اختر صورة", accept: "image/*", exts: [".jpg", ".jpeg", ".png", ".webp"] },
+    video: { label: "اختر الفيديو", accept: "video/*", exts: [".mp4", ".mov", ".webm", ".mkv"] },
+    audio: { label: "اختر فيديو أو ملف صوتي", accept: "video/*,audio/*", exts: [".mp4", ".mov", ".webm", ".mkv", ".m4a", ".wav", ".ogg", ".mp3"] },
+  };
+
   return (
     <Shell>
-      <PageTitle title="ضغط الملفات" sub="PDF أو صورة أو فيديو — حجم أصغر بنفس الأبعاد والدقة." />
-      {!busy && (
-        <div className="mx-auto mb-4 max-w-6xl px-4">
-          <p className="mb-2 text-sm text-muted-foreground">صيغة الفيديو:</p>
-          <div className="flex flex-wrap gap-2">
-            {([["orig", "نفس الدقة"], [1080, "1080p"], [720, "720p"], [360, "360p"], [270, "270p"], ["mp3", "MP3 صوت"]] as const).map(([k, l]) => (
-              <button
-                key={k}
-                onClick={() => setFmtOut(k)}
-                className={`rounded-lg border px-4 py-2 text-sm font-bold ${fmtOut === k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"}`}
-              >
-                {l}
+      <PageTitle title="ضغط الملفات" sub="اختر نوع الملف أولًا." />
+      <div className="mx-auto max-w-6xl px-4">
+        {busy ? (
+          <>
+            <Busy text={busy} />
+            {kind === "video" && (
+              <p className="mt-3 text-center text-sm text-muted-foreground">ضغط الفيديو يستغرق نفس مدة الفيديو تقريبًا. أبقِ الصفحة مفتوحة.</p>
+            )}
+          </>
+        ) : !kind ? (
+          <div className="grid grid-cols-2 gap-3">
+            {KINDS.map(({ k, label, sub, Icon }) => (
+              <button key={k} onClick={() => { setKind(k); setVres(null); setRes(null); }}
+                className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-5 text-center hover:border-primary">
+                <Icon className="h-8 w-8 text-primary" />
+                <span className="font-bold">{label}</span>
+                <span className="text-xs text-muted-foreground">{sub}</span>
               </button>
             ))}
           </div>
-        </div>
-      )}
-      {busy ? (
-        <Busy text={busy} />
-      ) : (
-        <FileDrop
-          onFiles={(fs) => fs[0] && run(fs[0])}
-          label="اختر ملف PDF أو صورة أو فيديو"
-          accept="application/pdf,.pdf,image/*,video/*"
-          exts={[".pdf", ".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm"]}
-        />
-      )}
-      {busy?.includes("الفيديو") && (
-        <p className="mx-auto mt-3 max-w-6xl px-4 text-center text-sm text-muted-foreground">
-          ضغط الفيديو يستغرق نفس مدة الفيديو تقريبًا. أبقِ الصفحة مفتوحة.
-        </p>
-      )}
-      {res && (
-        <p className="mx-auto mt-6 flex max-w-6xl items-center gap-2 px-4 text-accent">
-          <FileDown className="h-5 w-5" />
-          {res.after < res.before
-            ? `تم تنزيل ${res.name}: ${fmt(res.before)} ← ${fmt(res.after)} (أصغر بنسبة ${Math.round((1 - res.after / res.before) * 100)}%)`
-            : `الملف مضغوط مسبقًا ولا يمكن تصغيره أكثر دون فقدان الجودة (${fmt(res.before)}).`}
-        </p>
-      )}
+        ) : (
+          <>
+            <button onClick={back} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
+              <ArrowRight className="h-4 w-4" /> رجوع
+            </button>
+            {kind === "video" && !vres ? (
+              <>
+                <p className="mb-3 font-bold">اختر الدقة:</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([[1080, "1080p", "عالية جدًا"], [720, "720p", "عالية"], [360, "360p", "متوسطة"], [270, "270p", "أصغر حجم"], ["orig", "نفس الدقة", "الأصلية بحجم أقل"]] as const).map(([k, l, d]) => (
+                    <button key={k} onClick={() => setVres(k)} className="rounded-xl border border-border bg-card p-4 text-center hover:border-primary">
+                      <div className="text-lg font-bold">{l}</div>
+                      <div className="text-xs text-muted-foreground">{d}</div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                {kind === "video" && <p className="mb-3 text-sm">الدقة المختارة: <b>{vres === "orig" ? "نفس الدقة" : `${vres}p`}</b></p>}
+                <FileDrop onFiles={(fs) => fs[0] && run(fs[0])} {...drop[kind]} />
+              </>
+            )}
+          </>
+        )}
+        {res && !busy && (
+          <p className="mt-6 flex items-center gap-2 text-accent">
+            <FileDown className="h-5 w-5" />
+            {kind === "audio"
+              ? `تم تنزيل ${res.name} (${fmt(res.after)})`
+              : res.after < res.before
+                ? `تم تنزيل ${res.name}: ${fmt(res.before)} ← ${fmt(res.after)} (أصغر بنسبة ${Math.round((1 - res.after / res.before) * 100)}%)`
+                : `الملف مضغوط مسبقًا ولا يمكن تصغيره أكثر دون فقدان الجودة (${fmt(res.before)}).`}
+          </p>
+        )}
+      </div>
     </Shell>
   );
 }
