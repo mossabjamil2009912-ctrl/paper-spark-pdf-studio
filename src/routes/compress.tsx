@@ -39,8 +39,10 @@ function Compress() {
 
   const run = async (f: File) => {
     setRes(null);
+    const lib = await import("@/lib/compress");
+    const release = await lib.keepAlive();
+    let ok = false;
     try {
-      const lib = await import("@/lib/compress");
       const base = f.name.replace(/\.[^.]+$/, "");
       let blob: Blob, name: string;
       if (kind === "pdf") {
@@ -68,10 +70,12 @@ function Compress() {
       }
       downloadBytes(blob, name);
       setRes({ name, before: f.size, after: blob.size });
+      ok = true;
     } catch (e) {
       console.error(e);
       toast.error(kind === "audio" ? "تعذّر استخراج الصوت من هذا الملف" : "تعذّر ضغط الملف");
     } finally {
+      release(ok ? "اكتمل الملف وتم تنزيله ✅" : "تعذّرت العملية");
       setBusy(null);
     }
   };

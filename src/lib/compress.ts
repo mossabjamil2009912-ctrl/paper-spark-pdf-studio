@@ -164,8 +164,49 @@ async function recordVideo(
   }
 }
 
+/**
+ * Fast path: hardware WebCodecs decode→encode (much faster than real time, no playback needed,
+ * keeps running when the screen is not visible). Returns null if the browser/file can't do it.
+ */
+async function fastVideo(
+  file: File,
+  height: number | null,
+  bitrate: number | null,
+  onProgress: (p: number) => void,
+): Promise<{ blob: Blob; ext: string } | null> {
+  if (typeof VideoEncoder === "undefined") return null;
+  try {
+    const mb = await import("mediabunny");
+    const input = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
+    const output = new mb.Output({ format: new mb.Mp4OutputFormat({ fastStart: "in-memory" }), target: new mb.BufferTarget() });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) return null;
+    const srcH = track.displayHeight;
+    const h = height && height < srcH ? Math.round(height / 2) * 2 : undefined;
+    const srcBps = (file.size * 8) / Math.max(1, await input.computeDuration());
+    const bps = bitrate ?? Math.max(400_000, Math.min(srcBps * 0.5, track.displayWidth * srcH * 3));
+    const conv = await mb.Conversion.init({
+      input,
+      output,
+      video: { height: h, bitrate: Math.round(bps), codec: "avc", forceTranscode: true },
+      audio: { codec: "aac", bitrate: 128_000 },
+    });
+    if (!conv.isValid) return null;
+    conv.onProgress = (p) => onProgress(p);
+    await conv.execute();
+    const buf = output.target.buffer;
+    if (!buf || !buf.byteLength) return null;
+    return { blob: new Blob([buf], { type: "video/mp4" }), ext: "mp4" };
+  } catch (e) {
+    console.warn("fast video path failed, falling back", e);
+    return null;
+  }
+}
+
 /** Video: same resolution, lower bitrate. */
 export async function compressVideo(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
+  const f = await fastVideo(file, null, null, onProgress);
+  if (f) return f.blob.size < file.size ? f : { blob: file, ext: file.name.split(".").pop() || "mp4" };
   const r = await recordVideo(file, null, (w, h, src) => Math.max(400_000, Math.min(src * 0.5, w * h * 3)), onProgress);
   if (r.blob.size >= file.size) return { blob: file, ext: file.name.split(".").pop() || "mp4" };
   return r;
@@ -174,7 +215,36 @@ export async function compressVideo(file: File, onProgress: (p: number) => void)
 /** Video: re-encode at a chosen height (keeps aspect ratio; never upscales). */
 export async function convertVideo(file: File, height: VideoTarget, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
   const bps = { 270: 400_000, 360: 700_000, 720: 2_000_000, 1080: 4_000_000 }[height];
-  return recordVideo(file, height, () => bps, onProgress);
+  return (await fastVideo(file, height, bps, onProgress)) ?? recordVideo(file, height, () => bps, onProgress);
+}
+
+/** Keep the phone awake and the page alive while a long job runs; notify when done. */
+export async function keepAlive(): Promise<(msg?: string) => void> {
+  let lock: { release: () => Promise<void> } | null = null;
+  const nav = navigator as Navigator & { wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> } };
+  const getLock = async () => { try { lock = (await nav.wakeLock?.request("screen")) ?? null; } catch { /* ignore */ } };
+  await getLock();
+  const onVis = () => { if (document.visibilityState === "visible") getLock(); };
+  document.addEventListener("visibilitychange", onVis);
+  // Silent audio keeps Android from freezing the tab when you switch apps.
+  let ac: AudioContext | null = null;
+  try {
+    ac = new AudioContext();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    g.gain.value = 0.0001;
+    o.connect(g).connect(ac.destination);
+    o.start();
+  } catch { /* ignore */ }
+  try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch { /* ignore */ }
+  return (msg) => {
+    document.removeEventListener("visibilitychange", onVis);
+    lock?.release().catch(() => {});
+    ac?.close().catch(() => {});
+    if (msg && document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification("A'CTES", { body: msg, icon: "/icons/icon-192.png" }); } catch { /* ignore */ }
+    }
+  };
 }
 
 /** Extract the audio track as MP3 (fast, not real time). */
