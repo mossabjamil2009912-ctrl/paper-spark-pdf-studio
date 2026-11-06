@@ -199,8 +199,20 @@ export async function applyEdits(bytes: ArrayBuffer, edits: Record<number, PageE
   return doc.save();
 }
 
+type ResultListener = (r: { blob: Blob; name: string }) => void;
+let resultListener: ResultListener | null = null;
+/** Registered by ResultSheet; when present results are previewed instead of auto-downloaded. */
+export function onResult(fn: ResultListener | null) {
+  resultListener = fn;
+}
+
 export function downloadBytes(bytes: Uint8Array | Blob, name: string) {
   const blob = bytes instanceof Blob ? bytes : new Blob([bytes as BlobPart], { type: "application/pdf" });
+  if (resultListener) return resultListener({ blob, name });
+  saveBlob(blob, name);
+}
+
+export function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
