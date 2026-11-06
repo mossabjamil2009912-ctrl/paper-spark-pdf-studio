@@ -57,6 +57,7 @@ function EditPage() {
       setPages(r);
       setItems(r.map(() => []));
       setHistory([]);
+      setTool("edittext");
     } catch (e) {
       console.error(e);
       toast.error("تعذّر فتح الملف");
@@ -346,7 +347,7 @@ function PageCanvas({
     }
     // Seed: nearest ink cell to the tap.
     let seed = -1;
-    for (let r = 0; r <= 4 && seed < 0; r++) for (let dy = -r; dy <= r && seed < 0; dy++) for (let dx = -r; dx <= r; dx++) {
+    for (let r = 0; r <= 8 && seed < 0; r++) for (let dy = -r; dy <= r && seed < 0; dy++) for (let dx = -r; dx <= r; dx++) {
       const gx = cx - x0 + dx, gy = cy - y0 + dy;
       if (gx >= 0 && gy >= 0 && gx < gW && gy < gH && ink[gy * gW + gx]) { seed = gy * gW + gx; break; }
     }
