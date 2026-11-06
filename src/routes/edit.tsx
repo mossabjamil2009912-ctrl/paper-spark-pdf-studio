@@ -405,8 +405,19 @@ function PageCanvas({
     if (tool === "edittext") {
       e.preventDefault();
       if (draft) { commitDraft(); return; }
+      // Nearest real text first (table cells, numbers) so a tap never grabs a whole table.
+      const tol = 0.02;
+      let best = -1, bd = Infinity;
+      page.texts.forEach((t, k) => {
+        const dx = Math.max(t.x - x, 0, x - (t.x + t.w)), dy = Math.max(t.y - y, 0, y - (t.y + t.h)) * (1 / aspect);
+        const d = Math.hypot(dx, dy);
+        if (d < tol && d < bd) { bd = d; best = k; }
+      });
+      if (best >= 0) { editOriginal(page.texts[best]!, best); return; }
       void blobAt(x, y).then((b) => {
         if (!b) { toast("لا يوجد نص هنا. استخدم «تحديد حر» لاختيار منطقة"); return; }
+        const hits = page.texts.filter((t) => t.x + t.w / 2 > b.x && t.x + t.w / 2 < b.x + b.w && t.y + t.h / 2 > b.y && t.y + t.h / 2 < b.y + b.h);
+        if (hits.length > 1 || b.w > 0.6 || b.h > 0.15) { toast("اضغط على النص نفسه مباشرة، أو استخدم «تحديد حر»"); return; }
         void finishArea({ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h });
       });
       return;
