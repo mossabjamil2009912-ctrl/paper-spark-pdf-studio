@@ -189,7 +189,7 @@ async function fastVideo(
       input,
       output,
       video: { height: h, bitrate: Math.round(bps), codec: "avc", forceTranscode: true },
-      audio: { codec: "aac", bitrate: 128_000 },
+      audio: { bitrate: 128_000 },
     });
     if (!conv.isValid) return null;
     conv.onProgress = (p) => onProgress(p);
