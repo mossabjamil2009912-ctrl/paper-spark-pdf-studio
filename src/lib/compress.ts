@@ -289,10 +289,21 @@ export async function videoToMp3(file: File, onProgress: (p: number) => void): P
 /** Video: smallest possible file — 360p max, aims for ~1–2% of the original size (with a floor so it stays watchable). */
 export async function maxCompressVideo(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
   // Target ~1% of the original (99% smaller), even at a big quality cost.
-  const AUDIO = 32_000;
-  const pick = (srcBps: number) => Math.max(60_000, Math.min(300_000, srcBps * 0.01 - AUDIO));
-  const r =
-    (await fastVideo(file, 240, (s) => pick(s), onProgress, AUDIO)) ??
-    (await recordVideo(file, 240, (_w, _h, s) => pick(s), onProgress, AUDIO));
+  // Small/already-compressed files: drop to 144p with a tiny bitrate so they still shrink.
+  const small = file.size < 30 * 1024 * 1024;
+  const AUDIO = small ? 16_000 : 32_000;
+  const H = small ? 144 : 240;
+  const pick = (srcBps: number) =>
+    small ? Math.max(25_000, Math.min(80_000, srcBps * 0.15 - AUDIO)) : Math.max(60_000, Math.min(300_000, srcBps * 0.01 - AUDIO));
+  let r =
+    (await fastVideo(file, H, (s) => pick(s), onProgress, AUDIO)) ??
+    (await recordVideo(file, H, (_w, _h, s) => pick(s), onProgress, AUDIO));
+  if (r.blob.size >= file.size * 0.8) {
+    // Still not small enough: absolute floor (144p, ~25 kbps video, 12 kbps audio).
+    const again =
+      (await fastVideo(file, 144, () => 25_000, onProgress, 12_000)) ??
+      (await recordVideo(file, 144, () => 25_000, onProgress, 12_000));
+    if (again.blob.size < r.blob.size) r = again;
+  }
   return r.blob.size < file.size ? r : { blob: file, ext: file.name.split(".").pop() || "mp4" };
 }
