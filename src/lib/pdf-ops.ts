@@ -32,9 +32,13 @@ export async function loadDoc(bytes: ArrayBuffer) {
   return PDFDocument.load(bytes, { ignoreEncryption: true });
 }
 
-export async function mergePdfs(files: ArrayBuffer[]): Promise<Uint8Array> {
+export async function mergePdfs(files: ArrayBuffer[], blankBetween = false): Promise<Uint8Array> {
   const out = await PDFDocument.create();
-  for (const f of files) {
+  for (const [i, f] of files.entries()) {
+    if (blankBetween && i > 0) {
+      const last = out.getPage(out.getPageCount() - 1);
+      out.addPage([last.getWidth(), last.getHeight()]);
+    }
     const src = await loadDoc(f);
     const pages = await out.copyPages(src, src.getPageIndices());
     pages.forEach((p) => out.addPage(p));
