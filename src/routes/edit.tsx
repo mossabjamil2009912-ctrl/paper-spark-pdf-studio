@@ -175,7 +175,7 @@ function EditPage() {
           </div>
         </div>
         {tool === "edittext" && (
-          <p className="pb-2 text-center text-xs text-muted-foreground">انقر على أي نص في الصفحة لتعديله</p>
+          <p className="pb-2 text-center text-xs text-muted-foreground">انقر على أي نص أو شعار أو عنوان في الصفحة لتعديله</p>
         )}
         {tool === "area" && (
           <p className="pb-2 text-center text-xs text-muted-foreground">اسحب مربعاً فوق أي كلمة أو جزء من الصفحة لمسحه وكتابة بديل</p>
@@ -310,8 +310,82 @@ function PageCanvas({
     });
   };
 
+  /** Text drawn as shapes (logos, outlined titles) has no text layer: find the ink blob around the tap instead. */
+  const blobAt = async (px: number, py: number) => {
+    const img = new Image();
+    img.src = page.src;
+    await img.decode().catch(() => {});
+    const W = img.naturalWidth || 1, H = img.naturalHeight || 1;
+    const cv = document.createElement("canvas");
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    const cs = Math.max(2, Math.round(W / 400)); // grid cell in px
+    const gw = Math.ceil(W / cs), gh = Math.ceil(H / cs);
+    const cx = Math.floor((px * W) / cs), cy = Math.floor((py * H) / cs);
+    const R = 60; // local window in cells
+    const x0 = Math.max(0, cx - R), y0 = Math.max(0, cy - R), x1 = Math.min(gw, cx + R), y1 = Math.min(gh, cy + R);
+    const d = ctx.getImageData(x0 * cs, y0 * cs, (x1 - x0) * cs, (y1 - y0) * cs);
+    const iw = d.width;
+    const counts = new Map<number, number>();
+    for (let i = 0; i < d.data.length; i += 4 * 7) {
+      const k = ((d.data[i]! >> 4) << 8) | ((d.data[i + 1]! >> 4) << 4) | (d.data[i + 2]! >> 4);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const bk = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0xfff;
+    const br = ((bk >> 8) << 4) + 8, bgG = (((bk >> 4) & 15) << 4) + 8, bb = ((bk & 15) << 4) + 8;
+    const gW = x1 - x0, gH = y1 - y0;
+    const ink = new Uint8Array(gW * gH);
+    for (let gy = 0; gy < gH; gy++) for (let gx = 0; gx < gW; gx++) {
+      let hit = 0;
+      for (let yy = 0; yy < cs && !hit; yy++) for (let xx = 0; xx < cs; xx++) {
+        const i = ((gy * cs + yy) * iw + gx * cs + xx) * 4;
+        if (Math.abs(d.data[i]! - br) + Math.abs(d.data[i + 1]! - bgG) + Math.abs(d.data[i + 2]! - bb) > 90) { hit = 1; break; }
+      }
+      ink[gy * gW + gx] = hit;
+    }
+    // Seed: nearest ink cell to the tap.
+    let seed = -1;
+    for (let r = 0; r <= 4 && seed < 0; r++) for (let dy = -r; dy <= r && seed < 0; dy++) for (let dx = -r; dx <= r; dx++) {
+      const gx = cx - x0 + dx, gy = cy - y0 + dy;
+      if (gx >= 0 && gy >= 0 && gx < gW && gy < gH && ink[gy * gW + gx]) { seed = gy * gW + gx; break; }
+    }
+    if (seed < 0) return null;
+    // Flood fill joining letters on a line (horizontal gaps up to ~1 letter, vertical 1 cell).
+    const seen = new Uint8Array(gW * gH);
+    const stack = [seed];
+    seen[seed] = 1;
+    let mnx = gW, mny = gH, mxx = 0, mxy = 0;
+    const gapX = Math.max(3, Math.round(gW / 40));
+    while (stack.length) {
+      const p = stack.pop()!;
+      const gx = p % gW, gy = (p - gx) / gW;
+      mnx = Math.min(mnx, gx); mxx = Math.max(mxx, gx); mny = Math.min(mny, gy); mxy = Math.max(mxy, gy);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -gapX; dx <= gapX; dx++) {
+        const nx = gx + dx, ny = gy + dy;
+        if (nx < 0 || ny < 0 || nx >= gW || ny >= gH) continue;
+        const q = ny * gW + nx;
+        if (!seen[q] && ink[q]) { seen[q] = 1; stack.push(q); }
+      }
+    }
+    const pad = 1;
+    return {
+      x: ((x0 + mnx - pad) * cs) / W, y: ((y0 + mny - pad) * cs) / H,
+      w: ((mxx - mnx + 1 + 2 * pad) * cs) / W, h: ((mxy - mny + 1 + 2 * pad) * cs) / H,
+    };
+  };
+
   const onDown = (e: React.PointerEvent) => {
     const [x, y] = pt(e);
+    if (tool === "edittext") {
+      e.preventDefault();
+      if (draft) { commitDraft(); return; }
+      void blobAt(x, y).then((b) => {
+        if (!b) { toast("لا يوجد نص هنا. استخدم «تحديد حر» لاختيار منطقة"); return; }
+        void finishArea({ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h });
+      });
+      return;
+    }
     if (tool === "area") {
       e.preventDefault();
       if (draft) { commitDraft(); return; }
@@ -378,7 +452,7 @@ function PageCanvas({
       <img src={page.src} alt={`صفحة ${num}`} className="block w-full select-none" draggable={false} />
       <canvas
         ref={canvas}
-        className={`absolute inset-0 h-full w-full ${drawing ? "touch-none" : ""} ${tool === "none" || tool === "edittext" ? "pointer-events-none" : tool === "text" ? "cursor-text" : "cursor-crosshair"}`}
+        className={`absolute inset-0 h-full w-full ${drawing ? "touch-none" : ""} ${tool === "none" ? "pointer-events-none" : tool === "edittext" ? "cursor-text" : tool === "text" ? "cursor-text" : "cursor-crosshair"}`}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
