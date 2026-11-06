@@ -33,8 +33,8 @@ export async function compressPdf(buf: ArrayBuffer, max = false): Promise<Uint8A
     if (cs && cs !== PDFName.of("DeviceRGB") && cs !== PDFName.of("DeviceGray")) continue;
     if (d.get(PDFName.of("SMask")) === undefined && d.get(PDFName.of("Decode"))) continue;
     const src = obj.contents;
-    if (src.length < (max ? 4000 : 20000)) continue;
-    const r = await reencodeJpeg(src, max ? 0.4 : JPEG_Q, max ? 1200 : 0);
+    if (src.length < (max ? 2000 : 20000)) continue;
+    const r = await reencodeJpeg(src, max ? 0.2 : JPEG_Q, max ? 800 : 0);
     if (!r || r.out.length >= src.length * 0.9) continue;
     const out = r.out;
     d.set(PDFName.of("Width"), PDFNumber.of(r.w));
@@ -51,7 +51,7 @@ export async function compressPdf(buf: ArrayBuffer, max = false): Promise<Uint8A
 /** Image: same width/height; WebP if supported (smaller), else JPEG. PNG with alpha stays WebP to keep transparency. */
 export async function compressImage(file: File, max = false): Promise<{ blob: Blob; ext: string }> {
   const bmp = await createImageBitmap(file);
-  const k = max ? Math.min(1, 1280 / Math.max(bmp.width, bmp.height)) : 1;
+  const k = max ? Math.min(1, 800 / Math.max(bmp.width, bmp.height)) : 1;
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(bmp.width * k));
   c.height = Math.max(1, Math.round(bmp.height * k));
@@ -60,10 +60,10 @@ export async function compressImage(file: File, max = false): Promise<{ blob: Bl
   const tryType = async (t: string, q: number) =>
     new Promise<Blob | null>((r) => c.toBlob(r, t, q));
   let best: { blob: Blob; ext: string } = { blob: file, ext: file.name.split(".").pop() || "img" };
-  const webp = await tryType("image/webp", max ? 0.45 : 0.8);
+  const webp = await tryType("image/webp", max ? 0.2 : 0.8);
   if (webp && webp.type === "image/webp" && webp.size < best.blob.size) best = { blob: webp, ext: "webp" };
   if (!/png|gif|webp/i.test(file.type)) {
-    const jpg = await tryType("image/jpeg", max ? 0.45 : 0.8);
+    const jpg = await tryType("image/jpeg", max ? 0.2 : 0.8);
     if (jpg && jpg.size < best.blob.size) best = { blob: jpg, ext: "jpg" };
   }
   return best;
@@ -288,10 +288,11 @@ export async function videoToMp3(file: File, onProgress: (p: number) => void): P
 
 /** Video: smallest possible file — 360p max, aims for ~1–2% of the original size (with a floor so it stays watchable). */
 export async function maxCompressVideo(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
-  const AUDIO = 48_000;
-  const pick = (srcBps: number) => Math.max(120_000, Math.min(450_000, srcBps * 0.015 - AUDIO));
+  // Target ~1% of the original (99% smaller), even at a big quality cost.
+  const AUDIO = 32_000;
+  const pick = (srcBps: number) => Math.max(60_000, Math.min(300_000, srcBps * 0.01 - AUDIO));
   const r =
-    (await fastVideo(file, 360, (s) => pick(s), onProgress, AUDIO)) ??
-    (await recordVideo(file, 360, (_w, _h, s) => pick(s), onProgress, AUDIO));
+    (await fastVideo(file, 240, (s) => pick(s), onProgress, AUDIO)) ??
+    (await recordVideo(file, 240, (_w, _h, s) => pick(s), onProgress, AUDIO));
   return r.blob.size < file.size ? r : { blob: file, ext: file.name.split(".").pop() || "mp4" };
 }
