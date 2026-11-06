@@ -32,6 +32,13 @@ export function parseNumber(s: string): { value: number; fmt?: string } | null {
 
 type Seg = { str: string; x: number; r: number; y: number; h: number; base: number; bold: boolean; italic: boolean; fontName: string; generic: string; fg: string; bg: string; rtl: boolean };
 
+const ORDER = new WeakMap<Frag, number>();
+/** Mirrored brackets from visual-order extraction: ")Desktop App(" → "(Desktop App)". */
+export function fixBrackets(s: string, rtl: boolean): string {
+  if (!rtl) return s;
+  return s.replace(/\)([^()]*)\(/g, "($1)").replace(/\]([^[\]]*)\[/g, "[$1]");
+}
+
 function segmentsOfLine(frags: Frag[]): Seg[] {
   const rtl = frags.some((f) => AR.test(f.str));
   const byX = [...frags].sort((a, b) => a.x - b.x);
@@ -43,7 +50,9 @@ function segmentsOfLine(frags: Frag[]): Seg[] {
     else groups.push([f]);
   }
   return groups.map((g) => {
-    const ord = rtl ? [...g].reverse() : g;
+    // RTL: keep the PDF's own (logical) stream order — sorting overlapping
+    // Arabic glyphs by x swaps letters (شركة → رشكة).
+    const ord = rtl ? [...g].sort((a, b) => (ORDER.get(a) ?? 0) - (ORDER.get(b) ?? 0)) : g;
     let str = "";
     ord.forEach((f, i) => {
       if (i) {
@@ -57,7 +66,7 @@ function segmentsOfLine(frags: Frag[]): Seg[] {
     const x = Math.min(...g.map((f) => f.x)), r = Math.max(...g.map((f) => f.x + f.w));
     const y = Math.min(...g.map((f) => f.y)), base = Math.max(...g.map((f) => f.y + f.h));
     return {
-      str: str.normalize("NFKC").replace(/\s+/g, " ").trim(), x, r, y, h: main.h, base,
+      str: fixBrackets(str.normalize("NFKC").replace(/\s+/g, " ").trim(), AR.test(str)), x, r, y, h: main.h, base,
       bold: /bold|black|heavy|semibold|demi|w[6-9]/i.test(main.fontName),
       italic: /italic|oblique/i.test(main.fontName),
       fontName: main.fontName, generic: main.generic, fg: main.fg, bg: main.bg, rtl: AR.test(str),
@@ -88,6 +97,7 @@ const nearBlack = (hex: string) => {
 /** Lay a page's text out on a grid: lines become rows, aligned x-gaps become columns. */
 export function layoutPage(page: Pick<RenderedPage, "frags" | "width" | "height">) {
   const frags = page.frags.filter((f) => f.str.trim());
+  frags.forEach((f, i) => ORDER.set(f, i));
   const sorted = [...frags].sort((a, b) => a.y + a.h - (b.y + b.h));
   const lines: Frag[][] = [];
   for (const f of sorted) {
