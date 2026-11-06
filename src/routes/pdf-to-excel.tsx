@@ -50,7 +50,7 @@ function PdfToExcel() {
 
   return (
     <Shell>
-      <PageTitle title="تحويل PDF إلى Excel" sub="كل نص يصبح خلية قابلة للتعديل، بنفس الترتيب والأعمدة والخطوط والألوان." />
+      <PageTitle title="تحويل PDF إلى Excel" sub="بنفس الترتيب والتنسيق" />
       <div className="mx-auto mb-4 flex max-w-6xl flex-wrap gap-2 px-4">
         <Button variant={perPage ? "default" : "outline"} size="sm" onClick={() => setPerPage(true)}>كل صفحة في ورقة</Button>
         <Button variant={!perPage ? "default" : "outline"} size="sm" onClick={() => setPerPage(false)}>كل الصفحات في ورقة واحدة</Button>

@@ -42,7 +42,7 @@ function ExcelToPdf() {
 
   return (
     <Shell>
-      <PageTitle title="تحويل Excel إلى PDF" sub="نفس الأعمدة والخلايا المدمجة والحدود والألوان، بنص حاد يمكن نسخه." />
+      <PageTitle title="تحويل Excel إلى PDF" sub="بنفس التنسيق" />
       {busy ? (
         <Busy text="جارٍ التحويل…" />
       ) : (

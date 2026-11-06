@@ -50,7 +50,7 @@ function MergePage() {
 
   return (
     <Shell>
-      <PageTitle title="دمج الملفات" sub="أضف ملفين أو أكثر ورتّبها ثم ادمجها." />
+      <PageTitle title="دمج الملفات" sub="أضف ملفين أو أكثر" />
       {files.length === 0 ? (
         <FileDrop multiple label="اختر ملفات PDF" onFiles={setFiles} />
       ) : (

@@ -52,7 +52,7 @@ function ImagesPage() {
 
   return (
     <Shell>
-      <PageTitle title="تحويل PDF إلى صور" sub="اضغط على أي صفحة لتنزيلها كصورة، أو نزّل الكل." />
+      <PageTitle title="تحويل PDF إلى صور" sub="صورة لكل صفحة" />
       {busy ? (
         <Busy />
       ) : !pages ? (

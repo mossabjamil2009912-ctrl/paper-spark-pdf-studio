@@ -48,7 +48,7 @@ function StampPage() {
 
   return (
     <Shell>
-      <PageTitle title="ترقيم وعلامة مائية" sub="أرقام الصفحات في الأسفل، وختم مائل في وسط كل صفحة." />
+      <PageTitle title="ترقيم وعلامة مائية" sub="أرقام وختم لكل صفحة" />
       {!file ? (
         <FileDrop onFiles={(f) => f[0] && setFile(f[0])} />
       ) : busy ? (

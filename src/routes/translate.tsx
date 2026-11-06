@@ -75,12 +75,12 @@ function TranslatePage() {
 
   return (
     <Shell>
-      <PageTitle title={fixed ? (target === "ar" ? "ترجمة إلى العربية" : "ترجمة إلى الإنجليزية") : "ترجمة الملفات"} sub="ترجمة متخصصة تراعي مصطلحات مجال الملف وتحافظ على الأرقام والرموز والتنسيق — وليست ترجمة حرفية." />
+      <PageTitle title={fixed ? (target === "ar" ? "ترجمة إلى العربية" : "ترجمة إلى الإنجليزية") : "ترجمة الملفات"} sub="خدمة الترجمة الذكية" />
       {target === "ar" && (
         <p className="mx-auto mb-2 max-w-6xl px-4 text-sm text-muted-foreground">تبقى المصطلحات التقنية والاختصارات والرموز والأرقام بالإنجليزية كما هي.</p>
       )}
       <p className="mx-auto mb-4 max-w-6xl px-4 text-sm text-muted-foreground">
-        يُرسل نص الملف فقط (دون الملف نفسه) لخدمة الترجمة الذكية ثم يُعاد بناء الملف على جهازك.
+        
       </p>
       {busy ? (
         <Busy text={busy} />

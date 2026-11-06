@@ -101,7 +101,7 @@ function Compress() {
 
   return (
     <Shell>
-      <PageTitle title="ضغط الملفات" sub="اختر نوع الملف أولًا." />
+      <PageTitle title="ضغط الملفات" sub="اختر نوع الملف" />
       <div className="mx-auto max-w-6xl px-4">
         {busy ? (
           <>
