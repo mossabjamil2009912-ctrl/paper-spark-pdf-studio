@@ -3,15 +3,6 @@ import { FileUp } from "lucide-react";
 import logo from "@/assets/actes-logo-v2.png.asset.json";
 import { useRef, useState, type ReactNode } from "react";
 
-const nav = [
-  { to: "/edit", label: "تعديل" },
-  { to: "/merge", label: "دمج" },
-  { to: "/split", label: "تقسيم" },
-  { to: "/pdf-to-excel", label: "إلى Excel" },
-  { to: "/excel-to-pdf", label: "Excel إلى PDF" },
-  { to: "/translate", label: "ترجمة" },
-] as const;
-
 export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
@@ -20,18 +11,6 @@ export function Shell({ children }: { children: ReactNode }) {
           <Link to="/" className="flex items-center gap-2">
             <img src={logo.url} alt="أكتس" className="h-10 w-auto" />
           </Link>
-          <nav className="flex gap-1 overflow-x-auto text-sm">
-            {nav.map((n) => (
-              <Link
-                key={n.to}
-                to={n.to}
-                className="whitespace-nowrap rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-                activeProps={{ className: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground" }}
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
         </div>
       </header>
       <main>{children}</main>
