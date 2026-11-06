@@ -22,7 +22,7 @@ export const Route = createFileRoute("/compress")({
 const fmt = (n: number) => (n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB");
 
 type Kind = "pdf" | "image" | "video" | "audio";
-type Res = "orig" | 270 | 360 | 720 | 1080;
+type Res = "max" | "orig" | 270 | 360 | 720 | 1080;
 
 const KINDS: { k: Kind; label: string; sub: string; Icon: typeof FileText }[] = [
   { k: "pdf", label: "ملف PDF", sub: "تصغير حجم الملف", Icon: FileText },
@@ -34,6 +34,7 @@ const KINDS: { k: Kind; label: string; sub: string; Icon: typeof FileText }[] = 
 function Compress() {
   const [kind, setKind] = useState<Kind | null>(null);
   const [vres, setVres] = useState<Res | null>(null);
+  const [maxMode, setMaxMode] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [res, setRes] = useState<{ name: string; before: number; after: number } | null>(null);
 
@@ -47,12 +48,12 @@ function Compress() {
       let blob: Blob, name: string;
       if (kind === "pdf") {
         setBusy("جارٍ ضغط ملف PDF…");
-        const out = await lib.compressPdf(await f.arrayBuffer());
+        const out = await lib.compressPdf(await f.arrayBuffer(), maxMode);
         blob = out.length < f.size ? new Blob([out as BlobPart], { type: "application/pdf" }) : f;
         name = base + "-مضغوط.pdf";
       } else if (kind === "image") {
         setBusy("جارٍ ضغط الصورة…");
-        const r = await lib.compressImage(f);
+        const r = await lib.compressImage(f, maxMode);
         blob = r.blob;
         name = base + "-مضغوط." + r.ext;
       } else if (kind === "audio") {
@@ -64,9 +65,9 @@ function Compress() {
       } else {
         const prog = (p: number) => setBusy(`جارٍ ضغط الفيديو… ${Math.round(p * 100)}%`);
         prog(0);
-        const r = vres === "orig" || !vres ? await lib.compressVideo(f, prog) : await lib.convertVideo(f, vres, prog);
+        const r = vres === "max" ? await lib.maxCompressVideo(f, prog) : vres === "orig" || !vres ? await lib.compressVideo(f, prog) : await lib.convertVideo(f, vres, prog);
         blob = r.blob;
-        name = base + (vres && vres !== "orig" ? `-${vres}p.` : "-مضغوط.") + r.ext;
+        name = base + (vres && vres !== "orig" && vres !== "max" ? `-${vres}p.` : "-مضغوط.") + r.ext;
       }
       downloadBytes(blob, name);
       setRes({ name, before: f.size, after: blob.size });
@@ -124,8 +125,8 @@ function Compress() {
               <>
                 <p className="mb-3 font-bold">اختر الدقة:</p>
                 <div className="grid grid-cols-2 gap-3">
-                  {([[1080, "1080p", "عالية جدًا"], [720, "720p", "عالية"], [360, "360p", "متوسطة"], [270, "270p", "أصغر حجم"], ["orig", "نفس الدقة", "الأصلية بحجم أقل"]] as const).map(([k, l, d]) => (
-                    <button key={k} onClick={() => setVres(k)} className="rounded-xl border border-border bg-card p-4 text-center hover:border-primary">
+                  {([["max", "أقصى ضغط", "أصغر حجم ممكن (حتى 99%)"], [1080, "1080p", "عالية جدًا"], [720, "720p", "عالية"], [360, "360p", "متوسطة"], [270, "270p", "أصغر حجم"], ["orig", "نفس الدقة", "الأصلية بحجم أقل"]] as const).map(([k, l, d]) => (
+                    <button key={k} onClick={() => setVres(k)} className={(k === "max" ? "col-span-2 border-primary " : "") + "rounded-xl border border-border bg-card p-4 text-center hover:border-primary"}>
                       <div className="text-lg font-bold">{l}</div>
                       <div className="text-xs text-muted-foreground">{d}</div>
                     </button>
@@ -134,7 +135,17 @@ function Compress() {
               </>
             ) : (
               <>
-                {kind === "video" && <p className="mb-3 text-sm">الدقة المختارة: <b>{vres === "orig" ? "نفس الدقة" : `${vres}p`}</b></p>}
+                {(kind === "pdf" || kind === "image") && (
+                  <div className="mb-4 grid grid-cols-2 gap-3">
+                    {([[false, "ضغط عادي", "جودة أعلى"], [true, "أقصى ضغط", "أصغر حجم ممكن"]] as const).map(([m, l, d]) => (
+                      <button key={l} onClick={() => setMaxMode(m)} className={"rounded-xl border bg-card p-3 text-center " + (maxMode === m ? "border-primary ring-2 ring-primary" : "border-border")}>
+                        <div className="font-bold">{l}</div>
+                        <div className="text-xs text-muted-foreground">{d}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {kind === "video" && <p className="mb-3 text-sm">الدقة المختارة: <b>{vres === "max" ? "أقصى ضغط" : vres === "orig" ? "نفس الدقة" : `${vres}p`}</b></p>}
                 <FileDrop onFiles={(fs) => fs[0] && run(fs[0])} {...drop[kind]} />
               </>
             )}

@@ -2,23 +2,24 @@
 
 const JPEG_Q = 0.75;
 
-async function reencodeJpeg(bytes: Uint8Array, q = JPEG_Q): Promise<Uint8Array | null> {
+async function reencodeJpeg(bytes: Uint8Array, q = JPEG_Q, maxSide = 0): Promise<{ out: Uint8Array; w: number; h: number } | null> {
   try {
     const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: "image/jpeg" }));
+    const k = maxSide ? Math.min(1, maxSide / Math.max(bmp.width, bmp.height)) : 1;
     const c = document.createElement("canvas");
-    c.width = bmp.width;
-    c.height = bmp.height;
-    c.getContext("2d")!.drawImage(bmp, 0, 0);
+    c.width = Math.max(1, Math.round(bmp.width * k));
+    c.height = Math.max(1, Math.round(bmp.height * k));
+    c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
     const blob: Blob | null = await new Promise((r) => c.toBlob(r, "image/jpeg", q));
-    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+    return blob ? { out: new Uint8Array(await blob.arrayBuffer()), w: c.width, h: c.height } : null;
   } catch {
     return null;
   }
 }
 
 /** PDF: re-encode embedded JPEG photos at the same pixel size + compact object streams. Text stays vector. */
-export async function compressPdf(buf: ArrayBuffer): Promise<Uint8Array> {
+export async function compressPdf(buf: ArrayBuffer, max = false): Promise<Uint8Array> {
   const { PDFDocument, PDFName, PDFRawStream, PDFNumber } = await import("pdf-lib");
   const doc = await PDFDocument.load(buf, { ignoreEncryption: true });
   const ctx = doc.context;
@@ -32,9 +33,13 @@ export async function compressPdf(buf: ArrayBuffer): Promise<Uint8Array> {
     if (cs && cs !== PDFName.of("DeviceRGB") && cs !== PDFName.of("DeviceGray")) continue;
     if (d.get(PDFName.of("SMask")) === undefined && d.get(PDFName.of("Decode"))) continue;
     const src = obj.contents;
-    if (src.length < 20000) continue;
-    const out = await reencodeJpeg(src);
-    if (!out || out.length >= src.length * 0.9) continue;
+    if (src.length < (max ? 4000 : 20000)) continue;
+    const r = await reencodeJpeg(src, max ? 0.4 : JPEG_Q, max ? 1200 : 0);
+    if (!r || r.out.length >= src.length * 0.9) continue;
+    const out = r.out;
+    d.set(PDFName.of("Width"), PDFNumber.of(r.w));
+    d.set(PDFName.of("Height"), PDFNumber.of(r.h));
+    d.delete(PDFName.of("DecodeParms"));
     d.set(PDFName.of("Length"), PDFNumber.of(out.length));
     d.set(PDFName.of("ColorSpace"), PDFName.of("DeviceRGB"));
     d.set(PDFName.of("BitsPerComponent"), PDFNumber.of(8));
@@ -44,20 +49,21 @@ export async function compressPdf(buf: ArrayBuffer): Promise<Uint8Array> {
 }
 
 /** Image: same width/height; WebP if supported (smaller), else JPEG. PNG with alpha stays WebP to keep transparency. */
-export async function compressImage(file: File): Promise<{ blob: Blob; ext: string }> {
+export async function compressImage(file: File, max = false): Promise<{ blob: Blob; ext: string }> {
   const bmp = await createImageBitmap(file);
+  const k = max ? Math.min(1, 1280 / Math.max(bmp.width, bmp.height)) : 1;
   const c = document.createElement("canvas");
-  c.width = bmp.width;
-  c.height = bmp.height;
-  c.getContext("2d")!.drawImage(bmp, 0, 0);
+  c.width = Math.max(1, Math.round(bmp.width * k));
+  c.height = Math.max(1, Math.round(bmp.height * k));
+  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close();
   const tryType = async (t: string, q: number) =>
     new Promise<Blob | null>((r) => c.toBlob(r, t, q));
   let best: { blob: Blob; ext: string } = { blob: file, ext: file.name.split(".").pop() || "img" };
-  const webp = await tryType("image/webp", 0.8);
+  const webp = await tryType("image/webp", max ? 0.45 : 0.8);
   if (webp && webp.type === "image/webp" && webp.size < best.blob.size) best = { blob: webp, ext: "webp" };
   if (!/png|gif|webp/i.test(file.type)) {
-    const jpg = await tryType("image/jpeg", 0.8);
+    const jpg = await tryType("image/jpeg", max ? 0.45 : 0.8);
     if (jpg && jpg.size < best.blob.size) best = { blob: jpg, ext: "jpg" };
   }
   return best;
@@ -74,6 +80,7 @@ async function recordVideo(
   height: number | null,
   bitrate: (w: number, h: number, srcBps: number) => number,
   onProgress: (p: number) => void,
+  audioBps = 128_000,
 ): Promise<{ blob: Blob; ext: string }> {
   const url = URL.createObjectURL(file);
   const v = document.createElement("video");
@@ -124,7 +131,7 @@ async function recordVideo(
     ].find((m) => MediaRecorder.isTypeSupported(m));
     if (!mime) throw new Error("unsupported");
     const srcBps = (file.size * 8) / Math.max(1, dur);
-    const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: Math.round(bitrate(w, h, srcBps)), audioBitsPerSecond: 128_000 });
+    const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: Math.round(bitrate(w, h, srcBps)), audioBitsPerSecond: audioBps });
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     const done = new Promise<void>((r) => (rec.onstop = () => r()));
@@ -171,8 +178,9 @@ async function recordVideo(
 async function fastVideo(
   file: File,
   height: number | null,
-  bitrate: number | null,
+  bitrate: number | null | ((srcBps: number, dur: number) => number),
   onProgress: (p: number) => void,
+  audioBps = 128_000,
 ): Promise<{ blob: Blob; ext: string } | null> {
   if (typeof VideoEncoder === "undefined") return null;
   try {
@@ -183,13 +191,14 @@ async function fastVideo(
     if (!track) return null;
     const srcH = track.displayHeight;
     const h = height && height < srcH ? Math.round(height / 2) * 2 : undefined;
-    const srcBps = (file.size * 8) / Math.max(1, await input.computeDuration());
-    const bps = bitrate ?? Math.max(400_000, Math.min(srcBps * 0.5, track.displayWidth * srcH * 3));
+    const dur = Math.max(1, await input.computeDuration());
+    const srcBps = (file.size * 8) / dur;
+    const bps = typeof bitrate === "function" ? bitrate(srcBps, dur) : bitrate ?? Math.max(400_000, Math.min(srcBps * 0.5, track.displayWidth * srcH * 3));
     const conv = await mb.Conversion.init({
       input,
       output,
       video: { ...(h ? { height: h } : {}), bitrate: Math.round(bps), codec: "avc", forceTranscode: true },
-      audio: { bitrate: 128_000 },
+      audio: { bitrate: audioBps },
     });
     if (!conv.isValid) return null;
     // Never silently lose the sound: if audio can't be encoded here, use the slower path.
@@ -275,4 +284,14 @@ export async function videoToMp3(file: File, onProgress: (p: number) => void): P
   const end = enc.flush();
   if (end.length) parts.push(new Uint8Array(end));
   return { blob: new Blob(parts, { type: "audio/mpeg" }), ext: "mp3" };
+}
+
+/** Video: smallest possible file — 360p max, aims for ~1–2% of the original size (with a floor so it stays watchable). */
+export async function maxCompressVideo(file: File, onProgress: (p: number) => void): Promise<{ blob: Blob; ext: string }> {
+  const AUDIO = 48_000;
+  const pick = (srcBps: number) => Math.max(120_000, Math.min(450_000, srcBps * 0.015 - AUDIO));
+  const r =
+    (await fastVideo(file, 360, (s) => pick(s), onProgress, AUDIO)) ??
+    (await recordVideo(file, 360, (_w, _h, s) => pick(s), onProgress, AUDIO));
+  return r.blob.size < file.size ? r : { blob: file, ext: file.name.split(".").pop() || "mp4" };
 }
