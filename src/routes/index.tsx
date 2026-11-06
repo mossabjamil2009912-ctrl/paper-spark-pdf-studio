@@ -62,7 +62,15 @@ const tools: Tool[] = [
       { label: "تقسيم الملف", href: "/split" },
     ],
   },
-  { icon: Shrink, title: "ضغط PDF والصور والفيديو", tile: "tile-teal", href: "/compress" },
+  {
+    icon: Shrink,
+    title: "ضغط الملفات",
+    tile: "tile-teal",
+    options: [
+      { label: "ملفات - صور - فيديو", href: "/compress" },
+      { label: "استخراج الصوت", href: "/compress?kind=audio" },
+    ],
+  },
   {
     icon: Stamp,
     title: "أدوات إضافية",
@@ -95,7 +103,7 @@ function Index() {
           if (t.href)
             return (
               <a key={t.title} href={t.href} className="group rounded-xl border bg-card p-3 transition-all hover:-translate-y-0.5 hover:shadow-paper">
-                {head}
+                <div className="flex justify-center">{head}</div>
               </a>
             );
           return (

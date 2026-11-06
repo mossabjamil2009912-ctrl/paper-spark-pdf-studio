@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ArrowRight, FileDown, FileText, Image as ImageIcon, Music, Video } from "lucide-react";
 import { Busy, FileDrop, PageTitle, Shell } from "@/components/pdf/Shell";
@@ -33,6 +33,9 @@ const KINDS: { k: Kind; label: string; sub: string; Icon: typeof FileText }[] = 
 
 function Compress() {
   const [kind, setKind] = useState<Kind | null>(null);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("kind") === "audio") setKind("audio");
+  }, []);
   const [vres, setVres] = useState<Res | null>(null);
   const [maxMode, setMaxMode] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -109,7 +112,7 @@ function Compress() {
           </>
         ) : !kind ? (
           <div className="grid grid-cols-2 gap-3">
-            {KINDS.map(({ k, label, sub, Icon }) => (
+            {KINDS.filter((x) => x.k !== "audio").map(({ k, label, sub, Icon }) => (
               <button key={k} onClick={() => { setKind(k); setVres(null); setRes(null); }}
                 className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-5 text-center hover:border-primary">
                 <Icon className="h-8 w-8 text-primary" />
