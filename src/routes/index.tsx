@@ -44,7 +44,7 @@ type Tool = {
 };
 
 const tools: Tool[] = [
-  { icon: EditPdfIcon as unknown as LucideIcon, title: "تعديل PDF", tile: "text-primary !shadow-none", href: "/edit" },
+  { icon: EditPdfIcon as unknown as LucideIcon, title: "تحرير PDF", tile: "text-accent !shadow-none", href: "/edit" },
   {
     icon: ArrowLeftRight,
     title: "تحويل PDF ⇄ Excel",
