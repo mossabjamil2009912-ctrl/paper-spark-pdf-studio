@@ -83,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "عدّل ملفات PDF مجاناً في متصفحك." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "theme-color", content: "#d71920" },
+      { name: "theme-color", content: "#1f2937" },
     ],
     links: [
       {
