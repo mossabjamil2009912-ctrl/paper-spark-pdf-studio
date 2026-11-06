@@ -300,13 +300,37 @@ function PageCanvas({
     // Prefill with any detected text inside the box (useful for tables).
     const inside = page.texts.filter((t) => t.x + t.w / 2 > x && t.x + t.w / 2 < x + w && t.y + t.h / 2 > y && t.y + t.h / 2 < y + h);
     const first = inside[0];
-    const text = inside.map((t) => t.str).join(" ");
-    const rtl = first ? first.rtl : true;
+    let text = inside.map((t) => t.str).join(" ");
+    let ocrRtl: boolean | null = null;
+    if (!first) {
+      // Drawn text (logo/title as shapes): read the letters so the user edits them instead of retyping.
+      const crop = document.createElement("canvas");
+      const pad = 0.15;
+      const cx = (x - w * pad) * cv.width, cy = (y - h * pad) * cv.height;
+      const cw = w * (1 + 2 * pad) * cv.width, ch = h * (1 + 2 * pad) * cv.height;
+      const up = Math.max(1, 80 / Math.max(1, ch));
+      crop.width = Math.ceil(cw * up); crop.height = Math.ceil(ch * up);
+      const g = crop.getContext("2d")!;
+      g.fillStyle = "#fff"; g.fillRect(0, 0, crop.width, crop.height);
+      g.drawImage(cv, cx, cy, cw, ch, 0, 0, crop.width, crop.height);
+      const tid = toast.loading("جارٍ قراءة النص…");
+      try {
+        const { createWorker } = await import("tesseract.js");
+        const worker = await createWorker(["eng", "ara"]);
+        await worker.setParameters({ tessedit_pageseg_mode: "7" as never });
+        const r = await worker.recognize(crop);
+        await worker.terminate();
+        text = r.data.text.replace(/\s+/g, " ").trim();
+        ocrRtl = /[\u0600-\u06FF]/.test(text);
+      } catch (err) { console.warn(err); }
+      toast.dismiss(tid);
+    }
+    const rtl = first ? first.rtl : ocrRtl ?? false;
     const size = Math.max(0.008, Math.min(h * aspect * 0.8, first ? (first.h / 1.2) * aspect * 0.95 : 1));
     editingIdx.current = null;
     setDraft({
       x: rtl ? x + w : x, y, text, size, color: c.fg, bg: c.bg, ltr: !rtl,
-      ...(first ? { font: first.font, bold: first.bold, italic: first.italic } : {}),
+      ...(first ? { font: first.font, bold: first.bold, italic: first.italic } : { font: rtl ? '"IBM Plex Sans Arabic", Arial, sans-serif' : "Arial, Helvetica, sans-serif", bold: true }),
       cover: { x, y, w, h },
     });
   };
