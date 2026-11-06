@@ -217,12 +217,17 @@ export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Pr
 
 type XCell = import("exceljs").Cell;
 
-function colorOf(c: { argb?: string; theme?: number } | undefined, fallback: [number, number, number] | null): [number, number, number] | null {
-  if (c?.argb && c.argb.length >= 6) {
-    const h = c.argb.slice(-6);
-    return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
-  }
-  return fallback;
+const THEME = ["FFFFFF", "000000", "E7E6E6", "44546A", "4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"];
+function colorOf(c: { argb?: string; theme?: number; tint?: number } | undefined, fallback: [number, number, number] | null): [number, number, number] | null {
+  let h: string | undefined;
+  if (c?.argb && c.argb.length >= 6) h = c.argb.slice(-6);
+  else if (typeof c?.theme === "number") h = THEME[c.theme];
+  if (!h) return fallback;
+  const t = c?.tint ?? 0;
+  return [0, 2, 4].map((i) => {
+    const v = parseInt(h!.slice(i, i + 2), 16) / 255;
+    return t < 0 ? v * (1 + t) : v + (1 - v) * t;
+  }) as [number, number, number];
 }
 
 /** Render a cell value the way Excel displays it (number formats, percents, dates). */
@@ -342,9 +347,44 @@ export async function xlsxToPdf(data: ArrayBuffer): Promise<Uint8Array> {
     const totalW = colW.reduce((a, b) => a + b, 0);
     const landscape = ws.pageSetup?.orientation === "landscape" || totalW > 540;
     const PW = landscape ? 842 : 595, PH = landscape ? 595 : 842, M = 28;
-    const scale = Math.min(1, (PW - 2 * M) / totalW);
+    const fit = (PW - 2 * M) / totalW;
+    const fitPage = !!ws.pageSetup?.fitToPage && (ws.pageSetup?.fitToWidth ?? 1) === 1;
+    // never shrink text below 70% — split wide sheets into column pages instead
+    const scale = Math.min(1, fitPage ? fit : Math.max(fit, 0.7));
+    const groups: [number, number][] = [];
+    { let g0 = 1, w = 0;
+      for (let c = 1; c <= maxC; c++) {
+        const cw = colW[c - 1]! * scale;
+        if (w + cw > PW - 2 * M + 0.5 && c > g0) { groups.push([g0, c - 1]); g0 = c; w = 0; }
+        w += cw;
+      }
+      groups.push([g0, maxC]); }
     const colX: number[] = [0];
     colW.forEach((w) => colX.push(colX[colX.length - 1]! + w * scale));
+    // pictures
+    const pics: { img: import("pdf-lib").PDFImage; c1: number; r1: number; c2: number; r2: number }[] = [];
+    for (const im of ws.getImages()) {
+      try {
+        const media = wb.getImage(Number(im.imageId)) as { buffer?: ArrayBuffer | Uint8Array; base64?: string; extension?: string };
+        let bytes: Uint8Array | undefined = media.buffer ? new Uint8Array(media.buffer as ArrayBuffer) : undefined;
+        if (!bytes && media.base64) bytes = Uint8Array.from(atob(media.base64.replace(/^data:[^,]+,/, "")), (ch) => ch.charCodeAt(0));
+        if (!bytes) continue;
+        const isPng = bytes[0] === 0x89;
+        const img = isPng ? await doc.embedPng(bytes) : await doc.embedJpg(bytes);
+        const rg = im.range as unknown as { tl: { col: number; row: number }; br?: { col: number; row: number }; ext?: { width: number; height: number } };
+        const c1 = rg.tl.col, r1 = rg.tl.row;
+        let c2 = rg.br?.col, r2 = rg.br?.row;
+        if (c2 === undefined || r2 === undefined) {
+          const wpt = (rg.ext?.width ?? img.width) * 0.75, hpt = (rg.ext?.height ?? img.height) * 0.75;
+          let c = c1, left = wpt; while (left > 0 && c < 200) { const cw = colW[Math.floor(c)] ?? 48; const take = Math.min(left, cw * (1 - (c % 1))); c += take / cw; left -= take; if (take <= 0) break; }
+          let r = r1, lh = hpt; while (lh > 0 && r < 5000) { const rh = rowH[Math.floor(r)] ?? 15; const take = Math.min(lh, rh * (1 - (r % 1))); r += take / rh; lh -= take; if (take <= 0) break; }
+          c2 = c; r2 = r;
+        }
+        pics.push({ img, c1, r1, c2, r2 });
+        while (rowH.length < Math.ceil(r2)) rowH.push(ws.properties.defaultRowHeight ?? 15);
+        maxR = Math.max(maxR, rowH.length);
+      } catch { /* unsupported image */ }
+    }
     // paginate rows
     const pagesRows: [number, number][] = [];
     let start = 1, acc = 0;
@@ -355,23 +395,25 @@ export async function xlsxToPdf(data: ArrayBuffer): Promise<Uint8Array> {
     }
     pagesRows.push([start, maxR]);
 
-    for (const [r0, r1] of pagesRows) {
+    for (const [g0, g1] of groups) for (const [r0, r1] of pagesRows) {
       const page = doc.addPage([PW, PH]);
+      const gx = colX[g0 - 1]!;
       const rowY: Record<number, number> = {};
       let y = PH - M;
       for (let r = r0; r <= maxR; r++) { rowY[r] = y; y -= rowH[r - 1]! * scale; }
       rowY[maxR + 1] = y;
       const box = (r: number, c: number, r2: number, c2: number) => {
         const top = rowY[r]!, bottom = rowY[Math.min(r2, r1) + 1] ?? rowY[r2 + 1]!;
-        const x1 = rtl ? PW - M - colX[c2]! : M + colX[c - 1]!;
-        const x2 = rtl ? PW - M - colX[c - 1]! : M + colX[c2]!;
+        const cc2 = Math.min(c2, g1);
+        const x1 = rtl ? PW - M - (colX[cc2]! - gx) : M + colX[c - 1]! - gx;
+        const x2 = rtl ? PW - M - (colX[c - 1]! - gx) : M + colX[cc2]! - gx;
         return { x: x1, y: bottom, w: x2 - x1, h: top - bottom };
       };
       // pass 1: fills, pass 2: borders, pass 3: text
       for (const pass of [0, 1, 2]) {
         for (let r = r0; r <= r1; r++) {
           if (!rowH[r - 1]) continue;
-          for (let c = 1; c <= maxC; c++) {
+          for (let c = g0; c <= g1; c++) {
             if (slave.has(`${r}:${c}`) || !colW[c - 1]) continue;
             const cell = ws.getCell(r, c);
             const m = merged.get(`${r}:${c}`);
@@ -409,8 +451,11 @@ export async function xlsxToPdf(data: ArrayBuffer): Promise<Uint8Array> {
               const v = al.vertical ?? "bottom";
               let ty = v === "top" ? b.y + b.h - size - pad : v === "middle" ? b.y + (b.h + blockH) / 2 - size : b.y + pad + (lines.length - 1) * lh + size * 0.2;
               const textRtl = AR.test(text);
-              let h = al.horizontal ?? (isNum ? "right" : "general");
-              if (h === "general") h = textRtl || rtl ? "right" : "left";
+              let h: string = al.horizontal ?? "general";
+              if (h === "general") h = isNum ? "right" : textRtl && !rtl ? "right" : "left";
+              else if (textRtl && !rtl && al.readingOrder === "rtl") h = h === "left" ? "right" : h === "right" ? "left" : h;
+              // RTL sheets mirror left/right like Excel does
+              if (rtl) h = h === "left" ? "right" : h === "right" ? "left" : h;
               for (const ln of lines) {
                 const w = textWidth(font, ln, size);
                 // overflow into neighbours like Excel does for unwrapped text
@@ -421,6 +466,14 @@ export async function xlsxToPdf(data: ArrayBuffer): Promise<Uint8Array> {
             }
           }
         }
+      }
+      const fx = (c: number) => { const i = Math.min(Math.floor(c), colW.length); const v = (colX[i] ?? colX[colX.length - 1]!) + (colW[i] ?? 0) * scale * (c - i) - gx; return rtl ? PW - M - v : M + v; };
+      const fy = (r: number) => { const i = Math.floor(r) + 1; return (rowY[i] ?? rowY[maxR + 1]!) - (rowH[i - 1] ?? 0) * scale * (r - i + 1); };
+      for (const p of pics) {
+        if (p.c2 < g0 - 1 || p.c1 > g1 || p.r2 < r0 - 1 || p.r1 > r1) continue;
+        if (Math.floor(p.r1) + 1 < r0) continue;
+        const xa = fx(p.c1), xb = fx(p.c2), ya = fy(p.r1), yb = fy(p.r2);
+        page.drawImage(p.img, { x: Math.min(xa, xb), y: Math.min(ya, yb), width: Math.abs(xb - xa), height: Math.abs(ya - yb) });
       }
     }
   }
