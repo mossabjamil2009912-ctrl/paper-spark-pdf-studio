@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   Languages,
   ArrowLeftRight,
-  FilePen,
   Layers,
   Shrink,
   Stamp,
@@ -25,6 +24,17 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+function EditPdfIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21H11" />
+      <path d="M14 3v4h4l-4-4" />
+      <path d="M8 10h6M8 13.5h4" />
+      <path d="M19.4 12.6a1.6 1.6 0 0 1 2.3 2.3L16 20.6l-3 .8.8-3z" fill="currentColor" fillOpacity={0.35} />
+    </svg>
+  );
+}
+
 type Tool = {
   icon: LucideIcon;
   title: string;
@@ -34,7 +44,7 @@ type Tool = {
 };
 
 const tools: Tool[] = [
-  { icon: FilePen, title: "تعديل PDF", tile: "tile-red", href: "/edit" },
+  { icon: EditPdfIcon as unknown as LucideIcon, title: "تعديل PDF", tile: "tile-red", href: "/edit" },
   {
     icon: ArrowLeftRight,
     title: "تحويل PDF ⇄ Excel",
