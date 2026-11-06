@@ -188,7 +188,7 @@ async function fastVideo(
     const conv = await mb.Conversion.init({
       input,
       output,
-      video: { height: h, bitrate: Math.round(bps), codec: "avc", forceTranscode: true },
+      video: { ...(h ? { height: h } : {}), bitrate: Math.round(bps), codec: "avc", forceTranscode: true },
       audio: { bitrate: 128_000 },
     });
     if (!conv.isValid) return null;
