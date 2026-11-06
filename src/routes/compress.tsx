@@ -123,7 +123,7 @@ function Compress() {
           </div>
         ) : (
           <>
-            <button onClick={back} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
+            <button onClick={back} hidden={kind === "audio" && !vres} className="mb-4 flex items-center gap-1 text-sm text-muted-foreground">
               <ArrowRight className="h-4 w-4" /> رجوع
             </button>
             {kind === "video" && !vres ? (

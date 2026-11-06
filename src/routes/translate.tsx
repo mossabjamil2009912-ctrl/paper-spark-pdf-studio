@@ -26,7 +26,11 @@ function TranslatePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [target, setTarget] = useState<"en" | "ar">("en");
-  useEffect(() => { if (new URLSearchParams(window.location.search).get("to") === "ar") setTarget("ar"); }, []);
+  const [fixed, setFixed] = useState(false);
+  useEffect(() => {
+    const to = new URLSearchParams(window.location.search).get("to");
+    if (to === "ar" || to === "en") { setTarget(to); setFixed(true); }
+  }, []);
 
   const tr = async (segments: string[], context: string) => {
     const r = await call({ data: { segments, context, target } });
@@ -71,8 +75,8 @@ function TranslatePage() {
 
   return (
     <Shell>
-      <PageTitle title="ترجمة الملفات" sub="ترجمة متخصصة تراعي مصطلحات مجال الملف وتحافظ على الأرقام والرموز والتنسيق — وليست ترجمة حرفية." />
-      <div className="mx-auto mb-4 flex max-w-6xl gap-2 px-4">
+      <PageTitle title={fixed ? (target === "ar" ? "ترجمة إلى العربية" : "ترجمة إلى الإنجليزية") : "ترجمة الملفات"} sub="ترجمة متخصصة تراعي مصطلحات مجال الملف وتحافظ على الأرقام والرموز والتنسيق — وليست ترجمة حرفية." />
+      <div className={`mx-auto mb-4 max-w-6xl gap-2 px-4 ${fixed ? "hidden" : "flex"}`}>
         {([["en", "إلى الإنجليزية"], ["ar", "إلى العربية"]] as const).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setTarget(k)}
             className={`rounded-full border px-4 py-2 text-sm ${target === k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"}`}>
