@@ -25,10 +25,10 @@ function SplitPage() {
   const [kind, setKind] = useState<Kind | null>(null);
   if (!kind) return (<Shell><PageTitle title="تقسيم الملف" sub="اختر نوع الملف" /><KindPicker onPick={setKind} /></Shell>);
   if (kind === "pdf") return <PdfSplit />;
-  return <OfficeSplit kind={kind} back={() => setKind(null)} />;
+  return <OfficeSplit kind={kind} />;
 }
 
-function OfficeSplit({ kind, back }: { kind: Exclude<Kind, "pdf">; back: () => void }) {
+function OfficeSplit({ kind }: { kind: Exclude<Kind, "pdf"> }) {
   const k = KINDS[kind];
   const [file, setFile] = useState<{ name: string; bytes: ArrayBuffer } | null>(null);
   const [count, setCount] = useState(0);
@@ -85,7 +85,6 @@ function OfficeSplit({ kind, back }: { kind: Exclude<Kind, "pdf">; back: () => v
       {!file ? (
         <>
           <FileDrop label={`اختر ملف ${k.label}`} accept={k.accept} exts={k.exts} onFiles={(f) => f[0] && load(f[0])} />
-          <div className="mt-3 text-center"><Button variant="ghost" onClick={back}>نوع آخر</Button></div>
         </>
       ) : (
         <div className="mx-auto flex max-w-md flex-col items-stretch gap-2 px-4 pb-16">
@@ -97,7 +96,6 @@ function OfficeSplit({ kind, back }: { kind: Exclude<Kind, "pdf">; back: () => v
             </div>
           )}
           <Button onClick={() => run()} disabled={busy || count < 1}>{busy ? "جارٍ التقسيم…" : `كل ${unit} في ملف`}</Button>
-          <Button variant="ghost" onClick={back}>نوع آخر</Button>
         </div>
       )}
     </Shell>

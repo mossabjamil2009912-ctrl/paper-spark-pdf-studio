@@ -62,14 +62,28 @@ function MergePage() {
   return (
     <Shell>
       <PageTitle title={k ? `دمج ${k.label}` : "دمج الملفات"} sub={k ? "أضف ملفين أو أكثر" : "اختر نوع الملفات"} />
+      {kind && k && (
+        <div className="px-4">
+          <div className="mx-auto mb-4 max-w-3xl rounded-xl border bg-card p-3 text-sm">
+            {kind === "xlsx" ? (
+              <div className="flex flex-wrap gap-4">
+                <label className="flex items-center gap-2"><input type="radio" checked={!oneSheet} onChange={() => setOneSheet(false)} /> تبويبات منفصلة</label>
+                <label className="flex items-center gap-2"><input type="radio" checked={oneSheet} onChange={() => setOneSheet(true)} /> دمج في تبويب واحد</label>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={sep} onChange={(e) => setSep(e.target.checked)} />
+                {kind === "pptx" ? "شريحة فاصلة" : "صفحة فاصلة"}
+              </label>
+            )}
+          </div>
+        </div>
+      )}
       {!kind || !k ? (
         <KindPicker onPick={setKind} />
       ) : files.length === 0 ? (
         <>
           <FileDrop multiple label={`اختر ملفات ${k.label}`} accept={k.accept} exts={k.exts} onFiles={setFiles} />
-          <div className="mt-3 text-center">
-            <Button variant="ghost" onClick={() => setKind(null)}>نوع آخر</Button>
-          </div>
         </>
       ) : (
         <div className="mx-auto max-w-3xl px-4 pb-16">
@@ -86,24 +100,9 @@ function MergePage() {
             ))}
           </ul>
 
-          <div className="mt-4 rounded-xl border bg-card p-3 text-sm">
-            {kind === "xlsx" ? (
-              <div className="flex flex-wrap gap-4">
-                <label className="flex items-center gap-2"><input type="radio" checked={!oneSheet} onChange={() => setOneSheet(false)} /> تبويبات منفصلة</label>
-                <label className="flex items-center gap-2"><input type="radio" checked={oneSheet} onChange={() => setOneSheet(true)} /> دمج في تبويب واحد</label>
-              </div>
-            ) : (
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={sep} onChange={(e) => setSep(e.target.checked)} />
-                {kind === "pptx" ? "شريحة فاصلة" : "صفحة فاصلة"}
-              </label>
-            )}
-          </div>
-
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => more.current?.click()}><Plus /> إضافة ملفات</Button>
             <Button onClick={run} disabled={busy || files.length < 2}>{busy ? "جارٍ الدمج…" : "دمج وتحميل"}</Button>
-            <Button variant="ghost" onClick={() => { setFiles([]); setKind(null); }}>نوع آخر</Button>
           </div>
           <input
             ref={more}
