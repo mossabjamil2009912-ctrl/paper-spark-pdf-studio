@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer } from "lucide-react";
+import { Eraser, Highlighter, Pen, Signature, Type, Undo2, Download, MousePointer2, FilePenLine, SquareDashedMousePointer, ImageIcon, Trash2, ImagePlus } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Busy, FileDrop, Shell } from "@/components/pdf/Shell";
 import { SignaturePad } from "@/components/pdf/SignaturePad";
-import { drawItems, fontCss, hitTest, measureText, type Item } from "@/lib/annotations";
+import { drawItems, fontCss, hitTest, measureText, type ImageItem, type Item } from "@/lib/annotations";
 import { applyEdits, baseName, downloadBytes, isVectorable, type PageEdits } from "@/lib/pdf-ops";
 import { renderPages, sampleColors, coverFor, type RenderedPage } from "@/lib/pdf-render";
 
@@ -23,12 +23,13 @@ export const Route = createFileRoute("/edit")({
   component: EditPage,
 });
 
-type Tool = "none" | "edittext" | "area" | "text" | "pen" | "highlight" | "sign" | "erase";
+type Tool = "none" | "edittext" | "image" | "area" | "text" | "pen" | "highlight" | "sign" | "erase";
 const COLORS = ["#111827", "#1d4ed8", "#c2410c", "#15803d", "#facc15"] as const;
 const tools: { id: Tool; label: string; icon: typeof Pen }[] = [
   { id: "none", label: "تصفح", icon: MousePointer2 },
   { id: "edittext", label: "تعديل النص", icon: FilePenLine },
   { id: "area", label: "تحديد حر", icon: SquareDashedMousePointer },
+  { id: "image", label: "الصور", icon: ImageIcon },
   { id: "text", label: "نص", icon: Type },
   { id: "sign", label: "توقيع", icon: Signature },
   { id: "pen", label: "قلم", icon: Pen },
@@ -99,6 +100,7 @@ function EditPage() {
         const raster: Item[] = [];
         for (const it of list) {
           if (it.kind === "rect") e.rects.push(it);
+          else if (it.kind === "image" && /^data:image\/(png|jpe?g)/i.test(it.src)) (e.images ??= []).push({ x: it.x, y: it.y, w: it.w, h: it.h, src: it.src });
           else if (it.kind === "text" && isVectorable(it.text)) e.texts.push(it);
           else raster.push(it);
         }
@@ -178,6 +180,9 @@ function EditPage() {
         {tool === "edittext" && (
           <p className="pb-2 text-center text-xs text-muted-foreground">انقر على أي نص أو شعار أو عنوان في الصفحة لتعديله</p>
         )}
+        {tool === "image" && (
+          <p className="pb-2 text-center text-xs text-muted-foreground">انقر على أي صورة لتحريكها أو تكبيرها أو حذفها، أو أضف صورة جديدة من الزر أعلى كل صفحة</p>
+        )}
         {tool === "area" && (
           <p className="pb-2 text-center text-xs text-muted-foreground">اسحب مربعاً فوق أي كلمة أو جزء من الصفحة لمسحه وكتابة بديل</p>
         )}
@@ -244,6 +249,91 @@ function PageCanvas({
   const [tick, setTick] = useState(0);
   const [sel, setSel] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const aspect = page.height / page.width;
+  type Box = { x: number; y: number; w: number; h: number };
+  const wrap = useRef<HTMLDivElement>(null);
+  const fileIn = useRef<HTMLInputElement>(null);
+  const [selImg, setSelImg] = useState<ImageItem | null>(null);
+  const [taken, setTaken] = useState<Set<number>>(new Set());
+  const [drag, setDrag] = useState<{ item: ImageItem; box: Box; start: Box; mode: "move" | "resize"; sx: number; sy: number } | null>(null);
+  const origImgs = (page.images ?? []).map((im) => ({ x: im.x / page.width, y: im.y / page.height, w: im.w / page.width, h: im.h / page.height, src: im.src }));
+  const mkImg = (src: string) => { const im = new Image(); im.onload = () => setTick((t) => t + 1); im.src = src; return im; };
+
+  /** Paper colour just outside a box, so the old picture's place blends in. */
+  const ringColor = async (b: Box) => {
+    const img = new Image(); img.src = page.src; await img.decode().catch(() => {});
+    const W = img.naturalWidth || 1, H = img.naturalHeight || 1;
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const ctx = cv.getContext("2d", { willReadFrequently: true })!; ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, W, H).data;
+    const counts = new Map<string, number>();
+    const x0 = Math.floor(b.x * W) - 3, x1 = Math.ceil((b.x + b.w) * W) + 3, y0 = Math.floor(b.y * H) - 3, y1 = Math.ceil((b.y + b.h) * H) + 3;
+    const add = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      const i = (y * W + x) * 4;
+      const k = [d[i]!, d[i + 1]!, d[i + 2]!].map((v) => (v >> 3) << 3).map((v) => v.toString(16).padStart(2, "0")).join("");
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    };
+    for (let x = x0; x <= x1; x += 2) { add(x, y0); add(x, y1); }
+    for (let y = y0; y <= y1; y += 2) { add(x0, y); add(x1, y); }
+    let best = "ffffff", n = 0;
+    counts.forEach((v, k) => { if (v > n) { n = v; best = k; } });
+    const v = best.match(/../g)!.map((h) => parseInt(h, 16));
+    return v.every((c) => c >= 240) ? "#ffffff" : "#" + best;
+  };
+
+  const takeOriginal = async (k: number) => {
+    const o = origImgs[k]!;
+    const bg = await ringColor(o);
+    const item: ImageItem = { kind: "image", x: o.x, y: o.y, w: o.w, h: o.h, src: o.src, img: mkImg(o.src) };
+    const e = 1 / Math.max(page.width, 1);
+    onAdd({ kind: "rect", x: o.x - e, y: o.y - e, w: o.w + 2 * e, h: o.h + 2 * e, color: bg }, item);
+    setTaken((s) => new Set(s).add(k));
+    setSelImg(item);
+    return item;
+  };
+
+  const addPicture = async (f: File) => {
+    const url = await new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f); });
+    const im = new Image(); im.src = url; await im.decode();
+    const s = Math.min(1, 2000 / Math.max(im.naturalWidth, im.naturalHeight));
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(im.naturalWidth * s); cv.height = Math.round(im.naturalHeight * s);
+    cv.getContext("2d")!.drawImage(im, 0, 0, cv.width, cv.height);
+    const src = /png|gif|webp|svg/i.test(f.type) ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", 0.92);
+    const w = 0.4, h = (w * cv.height / cv.width) / aspect;
+    const item: ImageItem = { kind: "image", x: 0.3, y: Math.max(0, 0.5 - h / 2), w, h, src, img: mkImg(src) };
+    onAdd(item);
+    setSelImg(item);
+  };
+
+  const startDrag = (e: React.PointerEvent, item: ImageItem, mode: "move" | "resize") => {
+    e.preventDefault(); e.stopPropagation();
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    const b = { x: item.x, y: item.y, w: item.w, h: item.h };
+    setDrag({ item, box: b, start: b, mode, sx: e.clientX, sy: e.clientY });
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    if (!drag || !wrap.current) return;
+    const r = wrap.current.getBoundingClientRect();
+    const dx = (e.clientX - drag.sx) / r.width, dy = (e.clientY - drag.sy) / r.height;
+    const s = drag.start;
+    if (drag.mode === "move") setDrag({ ...drag, box: { ...s, x: s.x + dx, y: s.y + dy } });
+    else { const w = Math.max(0.02, s.w + dx); setDrag({ ...drag, box: { ...s, w, h: (w * s.h) / s.w } }); }
+  };
+  const endDrag = () => {
+    if (!drag) return;
+    const n: ImageItem = { ...drag.item, ...drag.box };
+    if (n.x !== drag.item.x || n.y !== drag.item.y || n.w !== drag.item.w) { onReplace([drag.item], [n]); setSelImg(n); }
+    setDrag(null);
+  };
+  const scaleSel = (f: number) => {
+    if (!selImg) return;
+    const w = selImg.w * f, h = selImg.h * f;
+    const n: ImageItem = { ...selImg, x: selImg.x - (w - selImg.w) / 2, y: selImg.y - (h - selImg.h) / 2, w, h };
+    onReplace([selImg], [n]); setSelImg(n);
+  };
+  const deleteSel = () => { if (selImg) { onReplace([selImg], []); setSelImg(null); } };
+  useEffect(() => { if (tool !== "image") setSelImg(null); }, [tool]);
 
   const redraw = useCallback(() => {
     const c = canvas.current;
@@ -251,8 +341,9 @@ function PageCanvas({
     const dpr = Math.min(4, Math.max(2, window.devicePixelRatio || 1));
     const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
-    drawItems(c.getContext("2d")!, live.current ? [...items, live.current] : items, W, H);
-  }, [items]);
+    const shown = drag ? items.filter((it) => it !== drag.item) : items;
+    drawItems(c.getContext("2d")!, live.current ? [...shown, live.current] : shown, W, H);
+  }, [items, drag]);
 
   useEffect(() => {
     redraw();
@@ -402,6 +493,7 @@ function PageCanvas({
 
   const onDown = (e: React.PointerEvent) => {
     const [x, y] = pt(e);
+    if (tool === "image") { setSelImg(null); return; }
     if (tool === "edittext") {
       e.preventDefault();
       if (draft) { commitDraft(); return; }
@@ -484,7 +576,7 @@ function PageCanvas({
   const drawing = tool === "pen" || tool === "highlight" || tool === "area";
 
   return (
-    <div className="relative bg-paper shadow-paper">
+    <div ref={wrap} className="relative bg-paper shadow-paper">
       <img src={page.src} alt={`صفحة ${num}`} className="block w-full select-none" draggable={false} />
       <canvas
         ref={canvas}
@@ -539,6 +631,41 @@ function PageCanvas({
             requestAnimationFrame(() => el.focus({ preventScroll: true }));
           }}
         />
+      )}
+      {tool === "image" && (
+        <>
+          {origImgs.map((o, k) => taken.has(k) ? null : (
+            <button key={"o" + k} type="button" aria-label="صورة" onClick={() => void takeOriginal(k)}
+              className="absolute outline-dashed outline-1 outline-accent/60 hover:bg-accent/10"
+              style={{ left: `${o.x * 100}%`, top: `${o.y * 100}%`, width: `${o.w * 100}%`, height: `${o.h * 100}%` }} />
+          ))}
+          {items.map((it, k) => it.kind !== "image" || it === selImg ? null : (
+            <button key={"i" + k} type="button" aria-label="صورة" onClick={() => setSelImg(it)}
+              className="absolute outline-dashed outline-1 outline-accent/60 hover:bg-accent/10"
+              style={{ left: `${it.x * 100}%`, top: `${it.y * 100}%`, width: `${it.w * 100}%`, height: `${it.h * 100}%` }} />
+          ))}
+          {selImg && (() => {
+            const b = drag?.item === selImg ? drag.box : selImg;
+            return (
+              <div className="absolute touch-none cursor-move outline outline-2 outline-primary"
+                style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }}
+                onPointerDown={(e) => startDrag(e, selImg, "move")} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+                {drag && <img src={selImg.src} alt="" className="h-full w-full" draggable={false} />}
+                <span className="absolute -bottom-3 -right-3 h-6 w-6 cursor-nwse-resize rounded-full border-2 border-card bg-primary"
+                  onPointerDown={(e) => startDrag(e, selImg, "resize")} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} />
+                {!drag && (
+                  <div className="absolute -top-11 left-1/2 flex -translate-x-1/2 gap-1 rounded-lg border bg-card p-1 shadow" onPointerDown={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => scaleSel(1.15)}>تكبير</Button>
+                    <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => scaleSel(1 / 1.15)}>تصغير</Button>
+                    <Button size="sm" variant="ghost" className="h-8 px-2 text-destructive" onClick={deleteSel}><Trash2 /> حذف</Button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <Button size="sm" className="absolute top-2 left-2 z-10" onClick={() => fileIn.current?.click()}><ImagePlus /> إضافة صورة</Button>
+          <input ref={fileIn} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void addPicture(f); }} />
+        </>
       )}
       <span className="absolute bottom-2 left-2 rounded bg-foreground/60 px-2 py-0.5 text-xs text-background">{num}</span>
     </div>

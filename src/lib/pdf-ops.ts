@@ -94,7 +94,15 @@ export async function stampOverlays(
 
 export type VecRect = { x: number; y: number; w: number; h: number; color: string };
 export type VecText = { x: number; y: number; text: string; size: number; color: string; font?: string | undefined; bold?: boolean | undefined; italic?: boolean | undefined; ltr?: boolean | undefined };
-export type PageEdits = { overlay?: Uint8Array; rects: VecRect[]; texts: VecText[] };
+export type VecImage = { x: number; y: number; w: number; h: number; src: string };
+export type PageEdits = { overlay?: Uint8Array; rects: VecRect[]; texts: VecText[]; images?: VecImage[] };
+
+function dataUrlBytes(src: string) {
+  const b = atob(src.slice(src.indexOf(",") + 1));
+  const u = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  return u;
+}
 
 const AR = /[\u0590-\u08FF\uFB1D-\uFEFF]/;
 /** True when text can be written as real PDF vector text with a standard font. */
@@ -145,6 +153,11 @@ export async function applyEdits(bytes: ArrayBuffer, edits: Record<number, PageE
     const { x: bx, y: by, width: W, height: H } = page.getCropBox();
     const top = by + H;
     for (const r of e.rects) page.drawRectangle({ x: bx + r.x * W, y: top - (r.y + r.h) * H, width: r.w * W, height: r.h * H, color: hex(r.color) });
+    for (const im of e.images ?? []) {
+      const bytes = dataUrlBytes(im.src);
+      const img = /^data:image\/jpe?g/i.test(im.src) ? await doc.embedJpg(bytes) : await doc.embedPng(bytes);
+      page.drawImage(img, { x: bx + im.x * W, y: top - (im.y + im.h) * H, width: im.w * W, height: im.h * H });
+    }
     if (e.overlay) page.drawImage(await doc.embedPng(e.overlay), { x: bx, y: by, width: W, height: H });
     for (const t of e.texts) {
       const ar = hasArabic(t.text);
