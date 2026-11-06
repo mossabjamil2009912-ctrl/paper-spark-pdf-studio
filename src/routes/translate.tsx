@@ -10,9 +10,9 @@ import { translateSegments } from "@/lib/translate.functions";
 export const Route = createFileRoute("/translate")({
   head: () => ({
     meta: [
-      { title: "ترجمة PDF وExcel بين العربية والإنجليزية — حبر" },
+      { title: "ترجمة PDF وExcel بين العربية والإنجليزية — أكتس" },
       { name: "description", content: "ترجم ملفات PDF وExcel إلى الإنجليزية أو العربية ترجمة احترافية تراعي المصطلحات والرموز مع الحفاظ على التنسيق." },
-      { property: "og:title", content: "ترجمة PDF وExcel بين العربية والإنجليزية — حبر" },
+      { property: "og:title", content: "ترجمة PDF وExcel بين العربية والإنجليزية — أكتس" },
       { property: "og:description", content: "ترجمة متخصصة غير حرفية مع بقاء التنسيق كما هو." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

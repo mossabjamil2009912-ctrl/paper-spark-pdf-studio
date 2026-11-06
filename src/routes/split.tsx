@@ -10,9 +10,9 @@ import { KINDS, KindPicker, type Kind } from "@/components/pdf/KindPicker";
 export const Route = createFileRoute("/split")({
   head: () => ({
     meta: [
-      { title: "تقسيم ملف PDF — حبر" },
+      { title: "تقسيم ملف PDF — أكتس" },
       { name: "description", content: "استخرج صفحات من ملف PDF أو افصل كل صفحة في ملف مستقل." },
-      { property: "og:title", content: "تقسيم ملف PDF — حبر" },
+      { property: "og:title", content: "تقسيم ملف PDF — أكتس" },
       { property: "og:description", content: "قسّم ملفات PDF بسهولة داخل متصفحك." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

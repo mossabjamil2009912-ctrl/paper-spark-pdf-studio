@@ -79,7 +79,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "حبر — محرر PDF" },
+      { title: "أكتس — محرر PDF" },
       { name: "description", content: "عدّل ملفات PDF مجاناً في متصفحك." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

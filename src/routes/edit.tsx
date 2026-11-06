@@ -13,9 +13,9 @@ import { renderPages, sampleColors, coverFor, type RenderedPage } from "@/lib/pd
 export const Route = createFileRoute("/edit")({
   head: () => ({
     meta: [
-      { title: "تعديل وتوقيع PDF — حبر" },
+      { title: "تعديل وتوقيع PDF — أكتس" },
       { name: "description", content: "أضف نصاً وتوقيعاً، ارسم وظلّل على ملف PDF مباشرة في المتصفح." },
-      { property: "og:title", content: "تعديل وتوقيع PDF — حبر" },
+      { property: "og:title", content: "تعديل وتوقيع PDF — أكتس" },
       { property: "og:description", content: "اكتب ووقّع وارسم على صفحات PDF." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

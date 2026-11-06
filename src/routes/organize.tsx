@@ -10,9 +10,9 @@ import { renderPages, type RenderedPage } from "@/lib/pdf-render";
 export const Route = createFileRoute("/organize")({
   head: () => ({
     meta: [
-      { title: "ترتيب وتدوير وحذف صفحات PDF — حبر" },
+      { title: "ترتيب وتدوير وحذف صفحات PDF — أكتس" },
       { name: "description", content: "دوّر صفحات PDF، احذفها وأعد ترتيبها مجاناً." },
-      { property: "og:title", content: "ترتيب صفحات PDF — حبر" },
+      { property: "og:title", content: "ترتيب صفحات PDF — أكتس" },
       { property: "og:description", content: "دوّر واحذف ورتّب صفحات ملفك." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

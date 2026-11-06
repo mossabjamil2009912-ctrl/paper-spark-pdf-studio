@@ -9,9 +9,9 @@ import { baseName, downloadBytes } from "@/lib/pdf-ops";
 export const Route = createFileRoute("/pdf-to-excel")({
   head: () => ({
     meta: [
-      { title: "تحويل PDF إلى Excel — حبر" },
+      { title: "تحويل PDF إلى Excel — أكتس" },
       { name: "description", content: "حوّل جداول ونصوص PDF إلى ملف Excel قابل للتعديل مع الحفاظ على الترتيب والخطوط والألوان." },
-      { property: "og:title", content: "تحويل PDF إلى Excel — حبر" },
+      { property: "og:title", content: "تحويل PDF إلى Excel — أكتس" },
       { property: "og:description", content: "PDF إلى Excel قابل للتعديل داخل متصفحك." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

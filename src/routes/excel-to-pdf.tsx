@@ -8,9 +8,9 @@ import { downloadBytes } from "@/lib/pdf-ops";
 export const Route = createFileRoute("/excel-to-pdf")({
   head: () => ({
     meta: [
-      { title: "تحويل Excel إلى PDF — حبر" },
+      { title: "تحويل Excel إلى PDF — أكتس" },
       { name: "description", content: "حوّل ملف Excel إلى PDF بنفس الأعمدة والحدود والألوان والخطوط، بنص حاد قابل للنسخ." },
-      { property: "og:title", content: "تحويل Excel إلى PDF — حبر" },
+      { property: "og:title", content: "تحويل Excel إلى PDF — أكتس" },
       { property: "og:description", content: "Excel إلى PDF بدقة عالية داخل متصفحك." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

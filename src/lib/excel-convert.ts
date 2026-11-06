@@ -177,7 +177,7 @@ async function pagePicker(page: RenderedPage): Promise<((x: number, y: number, w
 export async function pdfToXlsx(pages: RenderedPage[], perPageSheets = true): Promise<Blob> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "حبر";
+  wb.creator = "أكتس";
   let ws: import("exceljs").Worksheet | null = null;
   let rowOffset = 0;
   for (const [pi, page] of pages.entries()) {
