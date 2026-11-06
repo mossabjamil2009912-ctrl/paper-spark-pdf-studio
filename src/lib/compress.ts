@@ -91,7 +91,7 @@ export async function compressVideo(file: File, onProgress: (p: number) => void)
   await v.play();
   await done;
   URL.revokeObjectURL(url);
-  const blob = new Blob(chunks, { type: mime.split(";")[0] });
+  const blob = new Blob(chunks, { type: mime.split(";")[0] ?? "video/webm" });
   if (blob.size >= file.size) return { blob: file, ext: file.name.split(".").pop() || "mp4" };
   return { blob, ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
 }
