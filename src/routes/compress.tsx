@@ -25,6 +25,7 @@ function Compress() {
   const [busy, setBusy] = useState<string | null>(null);
   const [res, setRes] = useState<{ name: string; before: number; after: number } | null>(null);
 
+  const [fmtOut, setFmtOut] = useState<"orig" | 270 | 360 | 720 | 1080 | "mp3">("orig");
   const run = async (f: File) => {
     setRes(null);
     try {
@@ -41,9 +42,15 @@ function Compress() {
         const r = await lib.compressImage(f);
         blob = r.blob;
         name = base + "-مضغوط." + r.ext;
-      } else if (f.type.startsWith("video/")) {
-        setBusy("جارٍ ضغط الفيديو… 0%");
-        const r = await lib.compressVideo(f, (p) => setBusy(`جارٍ ضغط الفيديو… ${Math.round(p * 100)}%`));
+      } else if (f.type.startsWith("video/") || f.type.startsWith("audio/")) {
+        const prog = (p: number) => setBusy(`جارٍ ${fmtOut === "mp3" ? "استخراج الصوت" : "تحويل الفيديو"}… ${Math.round(p * 100)}%`);
+        prog(0);
+        const r =
+          fmtOut === "mp3"
+            ? await lib.videoToMp3(f, prog)
+            : fmtOut === "orig"
+              ? await lib.compressVideo(f, prog)
+              : await lib.convertVideo(f, fmtOut, prog);
         blob = r.blob;
         name = base + "-مضغوط." + r.ext;
       } else {
@@ -63,6 +70,22 @@ function Compress() {
   return (
     <Shell>
       <PageTitle title="ضغط الملفات" sub="PDF أو صورة أو فيديو — حجم أصغر بنفس الأبعاد والدقة." />
+      {!busy && (
+        <div className="mx-auto mb-4 max-w-6xl px-4">
+          <p className="mb-2 text-sm text-muted-foreground">صيغة الفيديو:</p>
+          <div className="flex flex-wrap gap-2">
+            {([["orig", "نفس الدقة"], [1080, "1080p"], [720, "720p"], [360, "360p"], [270, "270p"], ["mp3", "MP3 صوت"]] as const).map(([k, l]) => (
+              <button
+                key={k}
+                onClick={() => setFmtOut(k)}
+                className={`rounded-lg border px-4 py-2 text-sm font-bold ${fmtOut === k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"}`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {busy ? (
         <Busy text={busy} />
       ) : (

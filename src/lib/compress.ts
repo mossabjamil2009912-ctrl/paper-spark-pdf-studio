@@ -144,7 +144,7 @@ export async function convertVideo(
   await done;
   cancelAnimationFrame(raf);
   URL.revokeObjectURL(url);
-  return { blob: new Blob(chunks, { type: mime.split(";")[0] }), ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
+  return { blob: new Blob(chunks, { type: mime.split(";")[0] ?? "video/webm" }), ext: mime.startsWith("video/mp4") ? "mp4" : "webm" };
 }
 
 /** Extract the audio track as MP3 (fast, not real time). */
@@ -157,7 +157,7 @@ export async function videoToMp3(file: File, onProgress: (p: number) => void): P
   const enc = new Mp3Encoder(ch, audio.sampleRate, 192);
   const toI16 = (f: Float32Array) => {
     const o = new Int16Array(f.length);
-    for (let i = 0; i < f.length; i++) o[i] = Math.max(-1, Math.min(1, f[i])) * 0x7fff;
+    for (let i = 0; i < f.length; i++) o[i] = Math.max(-1, Math.min(1, f[i] ?? 0)) * 0x7fff;
     return o;
   };
   const L = toI16(audio.getChannelData(0));
